@@ -1,23 +1,17 @@
 import { useState } from 'react';
-import { testAPIConnection, testEngineConnection } from '../services/api.js';
+import { testConnection as testEndpointConnection } from '../services/api.js';
 
 export const useApiTest = () => {
   const [status, setStatus] = useState(null);
 
-  const testAPI = async (endpoint) => {
-    const result = await testAPIConnection(endpoint);
-    setStatus(result);
-  };
-
-  const testEngine = async (endpoint) => {
-    const result = await testEngineConnection(endpoint);
+  const testConnection = async (endpoint) => {
+    const result = await testEndpointConnection(endpoint);
     setStatus(result);
   };
 
   return {
     status,
-    testAPI,
-    testEngine
+    testConnection
   };
 };
 

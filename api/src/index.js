@@ -2,10 +2,14 @@ import express from 'express';
 import axios from 'axios';
 import cors from 'cors';
 import { testConnection } from './db/connection.js';
+import routes from './routes/index.js';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Mount API routes
+app.use('/api', routes);
 
 const ENGINE_URL = `http://${process.env.ENGINE_HOST || 'engine'}:${process.env.ENGINE_PORT || '8000'}`;
 

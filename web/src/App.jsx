@@ -3,7 +3,7 @@ import { TestButton } from './components/TestButton.jsx';
 import { StatusDisplay } from './components/StatusDisplay.jsx';
 
 function App() {
-  const { status, testAPI, testEngine } = useApiTest();
+  const { status, testConnection } = useApiTest();
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
@@ -11,25 +11,25 @@ function App() {
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
         <TestButton
-          onClick={() => testAPI('/status')}
+          onClick={() => testConnection('/status')}
           label="Test API Service"
           description="Tests if the API service is running and responding"
         />
         
         <TestButton
-          onClick={() => testEngine('/status')}
+          onClick={() => testConnection('/engine/status')}
           label="Test Engine Service"
           description="Tests if the Engine service is running and responding"
         />
         
         <TestButton
-          onClick={() => testEngine('/health')}
+          onClick={() => testConnection('/engine/health')}
           label="Test Engine DB Connection"
           description="Tests Engine → Database connection"
         />
         
         <TestButton
-          onClick={() => testAPI('/health')}
+          onClick={() => testConnection('/health')}
           label="Test Full System Health"
           description="Tests API → Database connection and API → Engine connection (complete system check)"
         />
