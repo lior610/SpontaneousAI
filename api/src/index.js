@@ -1,37 +1,59 @@
 import express from 'express';
-import pg from 'pg';
 import axios from 'axios';
+import cors from 'cors';
+import { testConnection } from './db/connection.js';
 
 const app = express();
+app.use(cors());
 app.use(express.json());
-
-const { Pool } = pg;
-const pool = new Pool({
-  host: process.env.DB_HOST || 'db',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'postgres',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
-});
 
 const ENGINE_URL = `http://${process.env.ENGINE_HOST || 'engine'}:${process.env.ENGINE_PORT || '8000'}`;
 
-app.get('/', (req, res) => {
+app.get('/status', (req, res) => {
   res.json({ service: 'api', status: 'running' });
+});
+
+app.get('/engine/status', async (req, res) => {
+  try {
+    const engineResponse = await axios.get(`${ENGINE_URL}/status`);
+    res.json(engineResponse.data);
+  } catch (error) {
+    res.status(500).json({
+      error: error.message
+    });
+  }
+});
+
+app.get('/engine/health', async (req, res) => {
+  try {
+    const engineResponse = await axios.get(`${ENGINE_URL}/health`);
+    res.json(engineResponse.data);
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+      details: error.response ? error.response.data : 'No response from engine'
+    });
+  }
 });
 
 app.get('/health', async (req, res) => {
   try {
-    // Test DB connection
-    const dbResult = await pool.query('SELECT NOW()');
+    // Test DB host connection (using default postgres database)
+    const dbTest = await testConnection();
     
-    // Test Engine connection
-    const engineResponse = await axios.get(`${ENGINE_URL}/health`);
+    // Test Engine service is running
+    const engineStatusResponse = await axios.get(`${ENGINE_URL}/status`);
+    
+    // Test Engine database connection
+    const engineHealthResponse = await axios.get(`${ENGINE_URL}/health`);
     
     res.json({
       status: 'healthy',
-      db: 'connected',
-      engine: engineResponse.data
+      db_host: dbTest.success ? 'connected' : 'disconnected',
+      engine: {
+        service: engineStatusResponse.data,
+        db_connection: engineHealthResponse.data
+      }
     });
   } catch (error) {
     res.status(500).json({
@@ -41,23 +63,6 @@ app.get('/health', async (req, res) => {
   }
 });
 
-app.get('/test-db', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT version()');
-    res.json({ status: 'success', db_version: result.rows[0].version });
-  } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
-  }
-});
-
-app.get('/test-engine', async (req, res) => {
-  try {
-    const response = await axios.get(`${ENGINE_URL}/test-db`);
-    res.json({ status: 'success', engine_response: response.data });
-  } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
-  }
-});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {

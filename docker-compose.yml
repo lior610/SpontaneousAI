@@ -1,17 +1,19 @@
-version: '3.8'
-
 services:
   # 1. The Database
   db:
     image: pgvector/pgvector:pg16
     ports:
       - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
     env_file: .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
 
-  # 2. The AI Brain (Python)
+  # 2. Attraction Engine (Python)
   engine:
     build: ./engine
     ports:
@@ -23,6 +25,7 @@ services:
       - db
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
+  # 3. API (Node.js)
   api:
     build: ./api
     ports:
