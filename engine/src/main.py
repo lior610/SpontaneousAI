@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from src.db.connection import test_connection
+from src.routers import attractions
 
 app = FastAPI(title="Attraction Engine")
+
+# Include routers
+app.include_router(attractions.router)
 
 @app.get("/status")
 def status():
