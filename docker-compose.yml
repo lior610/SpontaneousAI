@@ -18,7 +18,7 @@ services:
       - "8000:8000"
     env_file: .env
     volumes:
-      -./engine:/app 
+      - ./engine:/app 
     depends_on:
       - db
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
@@ -29,7 +29,7 @@ services:
       - "3000:3000"
     env_file: .env
     volumes:
-      -./api:/app
+      - ./api:/app
       - /app/node_modules          
     depends_on:
       - db
