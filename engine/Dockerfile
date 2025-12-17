@@ -12,8 +12,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the code
 COPY . .
 
-# Set PYTHONPATH so imports work correctly
-ENV PYTHONPATH=/app
+# Set PYTHONPATH so imports work correctly (shared-python will be mounted)
+ENV PYTHONPATH=/app:/shared-python
  
 # Default command (overridden by docker-compose in dev)
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
