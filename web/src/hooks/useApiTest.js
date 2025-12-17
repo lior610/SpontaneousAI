@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { testConnection as testEndpointConnection } from '../services/api.js';
+import { testConnection as testEndpointConnection } from '../services/api';
 
 export const useApiTest = () => {
   const [status, setStatus] = useState(null);

@@ -1,0 +1,10 @@
+# Database
+psycopg2-binary>=2.9.9
+
+# Data validation
+pydantic>=2.5.0
+email-validator>=2.0.0  # Required for EmailStr in pydantic
+
+# Embeddings (if shared)
+# sentence-transformers>=2.2.0
+
