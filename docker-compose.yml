@@ -54,19 +54,5 @@ services:
       - api
     command: npm run dev
 
-  # 5. Data Pipeline (Python - ETL & Scrapers)
-  data-pipeline:
-    build: ./data-pipeline
-    env_file: .env
-    volumes:
-      - ./data-pipeline:/app
-      - ./shared/python:/shared-python
-    environment:
-      - PYTHONPATH=/app:/shared-python
-    depends_on:
-      - db
-    # Can run as cronjob or on-demand
-    # command: python src/main.py
-
 volumes:
   postgres_data:
