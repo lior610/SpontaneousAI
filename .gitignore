@@ -1,4 +1,85 @@
-__pycache__/
-.Python
-.env
+### Operating System
+.DS_Store
+Thumbs.db
+desktop.ini
+
+### Node / JavaScript / React
+# dependencies
 node_modules/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# runtime
+.vite/
+.parcel-cache/
+/.parcel-cache/
+
+# build output
+dist/
+build/
+
+# misc
+*.tgz
+.env
+.env.*.local
+
+### Python
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Packaging
+build/
+dist/
+develop-eggs/
+eggs/
+*.egg-info/
+installd.cfg
+pip-wheel-metadata/
+share/python-wheels/
+
+# Test / coverage
+.pytest_cache/
+.mypy_cache/
+.pyre/
+.coverage
+.coverage.*
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints
+
+### IDEs and Editors
+.vscode/
+.idea/
+
+### Misc
+# Python-specific file created by some setups
+.Python
+
+# SQLite DBs
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# Exclude local secret/config files
+.env.local
+/.env
+
+# Uncomment to ignore lockfiles if using a package manager that you prefer not to commit
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
