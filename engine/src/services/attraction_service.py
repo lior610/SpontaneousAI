@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-# Ensure shared python path is available (for db/embedding if needed)
 shared_path = str(Path(__file__).resolve().parents[3] / "shared" / "python")
 if shared_path not in sys.path:
     sys.path.insert(0, shared_path)
