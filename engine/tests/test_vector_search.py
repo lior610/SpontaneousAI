@@ -11,6 +11,8 @@ import sys
 import random
 import time
 import statistics
+import argparse
+import json
 from pathlib import Path
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
@@ -43,62 +45,74 @@ TEST_QUERIES = [
     {
         "scenario": "Morning start - couple on cultural trip",
         "query": "Couple travelers, 9am morning local time, high energy level, low tiredness, prefer museums and history categories, looking for educational indoor activity, typical duration 60-90 minutes, low effort level, crowd tolerance is low prefer quiet, budget style is balanced",
-        "expected": {"categories": "Museum", "indoor_outdoor": "indoor", "tags": "educational", "good_for": "couple"}
+        "expected": {"categories": "Museum", "indoor_outdoor": "indoor", "tags": "educational", "good_for": "couple", "city": "Paris", "country": "France"},
+        "filters": {"city": "Paris", "country": "France"}
     },
     {
         "scenario": "After lunch - solo traveler seeking relaxation",
         "query": "Solo traveler, 2pm afternoon, medium-low energy level after eating, high tiredness from morning activities, wants outdoor activity with chill vibe, very low effort level, typical duration 30-45 minutes, crowd tolerance medium, weather is sunny",
-        "expected": {"indoor_outdoor": "outdoor", "effort_level": "low", "tags": "chill", "good_for": "solo"}
+        "expected": {"indoor_outdoor": "outdoor", "effort_level": "low", "tags": "chill", "good_for": "solo", "city": "Barcelona", "country": "Spain"},
+        "filters": {"city": "Barcelona", "country": "Spain"}
     },
     {
         "scenario": "Evening - romantic date",
         "query": "Couple on romantic trip, 7pm evening local time, medium energy, low hunger level need food soon, want restaurant category with romantic vibe, indoor preferred, typical duration 2-3 hours, premium budget style, effort level low prefer sitting",
-        "expected": {"categories": "Restaurant", "tags": "romantic", "good_for": "couple"}
+        "expected": {"categories": "Restaurant", "tags": "romantic", "good_for": "couple", "city": "Paris", "country": "France"},
+        "filters": {"city": "Paris", "country": "France"}
     },
     {
         "scenario": "Family with kids - afternoon",
         "query": "Traveling with kids, 3pm afternoon, kids have very high energy level, parents medium-low energy, need outdoor park category, kids-friendly tags, typical duration 1-2 hours, high activity intensity for kids to burn energy, crowd tolerance high kids can be loud, budget style is balanced prefer free or low cost",
-        "expected": {"categories": "Park", "tags": "kids", "good_for": "kids", "indoor_outdoor": "outdoor"}
+        "expected": {"categories": "Park", "tags": "kids", "good_for": "kids", "indoor_outdoor": "outdoor", "city": "London", "country": "UK"},
+        "filters": {"city": "London", "country": "UK"}
     },
     {
         "scenario": "Morning - adventurous solo hiker",
         "query": "Solo adventurer, 8am morning start, very high energy level, low tiredness well-rested, prefer adventure and nature categories, want hiking trail outdoor, high effort level and high activity intensity, typical duration 3-4 hours, crowd tolerance low prefer solitude, weather conditions excellent",
-        "expected": {"categories": "Hiking", "tags": "adventure", "effort_level": "high", "good_for": "solo"}
+        "expected": {"categories": "Hiking", "tags": "adventure", "effort_level": "high", "good_for": "solo", "city": "Denver", "country": "USA"},
+        "filters": {"city": "Berlin", "country": "Germany"}
     },
     {
         "scenario": "Night - friends seeking social experience",
         "query": "Friends group of 4, age group 20s-30s, 10pm night time Friday, high energy level, want bar category with lively social vibe, indoor preferred, typical duration 2-3 hours, crowd tolerance medium not too packed, nightlife and social preferences high, budget style balanced",
-        "expected": {"categories": "Bar", "tags": "lively", "good_for": "friends"}
+        "expected": {"categories": "Bar", "tags": "lively", "good_for": "friends", "city": "London", "country": "UK"},
+        "filters": {"city": "London", "country": "UK"}
     },
     {
         "scenario": "Rainy day - entertainment needed",
         "query": "Solo traveler, 3pm afternoon, weather is heavy rain, medium energy level, want indoor entertainment cinema category, relaxation preference high, typical duration around 90-120 minutes, low effort level prefer sitting, crowd tolerance medium, budget style balanced",
-        "expected": {"categories": "Cinema", "typical_duration_min": 90, "indoor_outdoor": "indoor"}
+        "expected": {"categories": "Cinema", "typical_duration_min": 90, "indoor_outdoor": "indoor", "city": "London", "country": "UK"},
+        "filters": {"city": "London", "country": "UK"}
     },
     {
         "scenario": "Afternoon - casual browsing",
         "query": "Solo traveler, 2pm afternoon, medium energy but high tiredness from morning museums, want shopping category with chill vibe, indoor preferred for air conditioning, typical duration 1-2 hours, very low effort level just browsing, shopping preference medium, budget style budget-conscious not buying much",
-        "expected": {"categories": "Shopping", "tags": "chill", "good_for": "solo"}
+        "expected": {"categories": "Shopping", "tags": "chill", "good_for": "solo", "city": "Tokyo", "country": "Japan"},
+        "filters": {"city": "Tokyo", "country": "Japan"}
     },
     {
         "scenario": "After museum - more culture",
         "query": "Couple travelers, 4pm afternoon, medium-low energy level, medium-high tiredness from 2 hours standing indoors, want historical category outdoor for fresh air, educational tags, typical duration 60-90 minutes, low to medium effort level, pace preference slow can walk at own pace, museums and history preferences high",
-        "expected": {"categories": "Historical", "tags": "educational", "indoor_outdoor": "outdoor"}
+        "expected": {"categories": "Historical", "tags": "educational", "indoor_outdoor": "outdoor", "city": "Rome", "country": "Italy"},
+        "filters": {"city": "Tel Aviv", "country": "Israel"}
     },
     {
         "scenario": "Post-activity rest - needs caffeine",
         "query": "Solo traveler, 4pm afternoon, very low energy level exhausted, very high tiredness level, want cafe category with quiet vibe, indoor with AC, typical duration 60+ minutes need rest, very low effort level must sit, low crowd tolerance want peace, food and relaxation preferences high",
-        "expected": {"categories": "Cafe", "tags": "quiet", "good_for": "solo"}
+        "expected": {"categories": "Cafe", "tags": "quiet", "good_for": "solo", "city": "Berlin", "country": "Germany"},
+        "filters": {"city": "Berlin", "country": "Germany"}
     },
     {
         "scenario": "Hungry after hiking - need food fast",
         "query": "Couple travelers, 12pm lunch time, low energy level from exertion, high tiredness and very high hunger level, want restaurant category casual, indoor preferred for AC, typical duration 60 minutes, low effort level need to sit and recover, food preference very high, budget style balanced",
-        "expected": {"categories": "Restaurant", "good_for": "couple", "effort_level": "low"}
+        "expected": {"categories": "Restaurant", "good_for": "couple", "effort_level": "low", "city": "Denver", "country": "USA"},
+        "filters": {"city": "Tokyo", "country": "Japan"}
     },
     {
         "scenario": "Late afternoon - cultural exploration",
         "query": "Friends group of 3, age group 20s, 5pm early evening, medium energy level, low tiredness, want historical category outdoor, educational tags, social vibe prefer discussing together, typical duration 1-2 hours, low to medium effort level, museums and history preferences high, budget style budget-conscious students",
-        "expected": {"categories": "Historical", "tags": "educational", "good_for": "friends"}
+        "expected": {"categories": "Historical", "tags": "educational", "good_for": "friends", "city": "Athens", "country": "Greece"},
+        "filters": {"city": "Tel Aviv", "country": "Israel"}
     },
 ]
 
@@ -133,10 +147,13 @@ def check_relevance(result, expected_criteria):
     
     return score / checks if checks > 0 else 0
 
-def run_evaluation():
+def run_evaluation(custom_query: str = None, custom_expected: dict = None):
     print(f"\n🚀 ATTRACTION ENGINE - CONTEXT-BASED RECOMMENDATION TEST")
     print(f"Simulating: System predicts next activity based on user state + context")
-    print(f"Testing {NUM_QUERIES} randomly selected scenarios (from {len(TEST_QUERIES)} total), showing top {TOP_K} results each")
+    if custom_query:
+        print(f"Testing 1 custom scenario from CLI, showing top {TOP_K} results")
+    else:
+        print(f"Testing {NUM_QUERIES} randomly selected scenarios (from {len(TEST_QUERIES)} total), showing top {TOP_K} results each")
     print("-" * 80)
 
     # Load Model
@@ -146,14 +163,22 @@ def run_evaluation():
     total_relevance_scores = []
     total_latencies = []
     
-    # Randomly select NUM_QUERIES scenarios
-    selected_scenarios = random.sample(TEST_QUERIES, min(NUM_QUERIES, len(TEST_QUERIES)))
+    # Choose scenarios
+    if custom_query:
+        selected_scenarios = [{
+            "scenario": "Custom CLI Query",
+            "query": custom_query,
+            "expected": custom_expected or {},
+        }]
+    else:
+        selected_scenarios = random.sample(TEST_QUERIES, min(NUM_QUERIES, len(TEST_QUERIES)))
 
-    # Run each test scenario (randomly selected)
+    # Run each test scenario
     for i, test_case in enumerate(selected_scenarios, 1):
         scenario_name = test_case["scenario"]
         query_text = test_case["query"]
-        expected = test_case["expected"]
+        expected = test_case.get("expected", {})
+        filters = test_case.get("filters", {})
         
         print(f"\n{'='*80}")
         print(f"Scenario {i}: {scenario_name}")
@@ -168,7 +193,8 @@ def run_evaluation():
         # Use the actual search function from vector_search.py
         results = search_similar_attractions(
             query_embedding=query_vector,
-            limit=TOP_K
+            limit=TOP_K,
+            filters=filters,
         )
         
         end_time = time.time()
@@ -179,6 +205,10 @@ def run_evaluation():
         print(f"\nTop {TOP_K} Predicted Activities:")
         query_relevance_scores = []
         
+        if not results:
+            print("  ⚠️  No results returned for this scenario.")
+            continue
+
         for rank, attraction in enumerate(results, 1):
             relevance = check_relevance(attraction, expected)
             query_relevance_scores.append(relevance)
@@ -199,12 +229,13 @@ def run_evaluation():
             
             print(f"\n  {icon} #{rank}. {attraction['name']} (similarity: {attraction['similarity']:.4f})")
             print(f"      Category: {attraction['categories']} | Tags: {attraction['tags']}")
+            print(f"      Location: {attraction.get('city')}, {attraction.get('country')}")
             print(f"      Good for: {attraction['good_for']} | {attraction['indoor_outdoor']} | Effort: {attraction['effort_level']}")
             print(f"      Match Quality: {relevance:.0%} - {status}")
             print(f"      Description: {attraction['short_description'][:80]}...")
         
         # Calculate metrics for this query
-        avg_relevance = statistics.mean(query_relevance_scores)
+        avg_relevance = statistics.mean(query_relevance_scores) if query_relevance_scores else 0
         top1_relevance = query_relevance_scores[0] if query_relevance_scores else 0
         
         total_relevance_scores.extend(query_relevance_scores)
@@ -215,9 +246,9 @@ def run_evaluation():
         print(f"      Prediction Time: {latency:.1f}ms")
 
     # --- FINAL REPORT ---
-    avg_relevance = statistics.mean(total_relevance_scores)
-    avg_latency = statistics.mean(total_latencies)
-    p95_latency = statistics.quantiles(total_latencies, n=20)[18] if len(total_latencies) >= 20 else max(total_latencies)
+    avg_relevance = statistics.mean(total_relevance_scores) if total_relevance_scores else 0
+    avg_latency = statistics.mean(total_latencies) if total_latencies else 0
+    p95_latency = statistics.quantiles(total_latencies, n=20)[18] if len(total_latencies) >= 20 else (max(total_latencies) if total_latencies else 0)
     
     # Count how many predictions were accurate
     perfect_matches = sum(1 for s in total_relevance_scores if s >= 0.8)
@@ -245,4 +276,17 @@ def run_evaluation():
     print("="*80 + "\n")
 
 if __name__ == "__main__":
-    run_evaluation()
+    parser = argparse.ArgumentParser(description="Run vector search relevance tests.")
+    parser.add_argument("--query", type=str, help="Custom query text to test (bypasses predefined scenarios).")
+    parser.add_argument("--expected", type=str, help="Optional expected criteria as JSON string, e.g. '{\"categories\":\"Museum\",\"tags\":\"educational\"}'.")
+    args = parser.parse_args()
+
+    custom_expected = None
+    if args.expected:
+        try:
+            custom_expected = json.loads(args.expected)
+        except Exception as e:
+            print(f"Failed to parse --expected JSON: {e}")
+            sys.exit(1)
+
+    run_evaluation(custom_query=args.query, custom_expected=custom_expected)
