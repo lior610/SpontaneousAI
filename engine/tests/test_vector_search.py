@@ -38,6 +38,18 @@ NUM_QUERIES = 3      # Number of test scenarios to run
 TOP_K = 10             # Show top K results for each scenario
 MODEL_NAME = 'all-MiniLM-L6-v2'
 
+# Pool of cities/countries to randomly assign per scenario
+LOCATION_POOL = [
+    ("Paris", "France"),
+    ("London", "UK"),
+    ("Berlin", "Germany"),
+    ("Athens", "Greece"),
+    ("Tokyo", "Japan"),
+    ("Denver", "USA"),
+    ("Tel Aviv", "Israel"),
+    ("New York", "USA"),
+]
+
 # --- TEST SCENARIOS ---
 # Simulates the system's internal reasoning based on user state + context
 # Format: What the system "knows" about the user right now
@@ -177,8 +189,17 @@ def run_evaluation(custom_query: str = None, custom_expected: dict = None):
     for i, test_case in enumerate(selected_scenarios, 1):
         scenario_name = test_case["scenario"]
         query_text = test_case["query"]
-        expected = test_case.get("expected", {})
-        filters = test_case.get("filters", {})
+        expected = dict(test_case.get("expected", {}))
+
+        # Randomize location per run to exercise different geos
+        city, country = random.choice(LOCATION_POOL)
+        expected["city"] = city
+        expected["country"] = country
+
+        base_filters = dict(test_case.get("filters", {}))
+        base_filters["city"] = city
+        base_filters["country"] = country
+        filters = base_filters
         
         print(f"\n{'='*80}")
         print(f"Scenario {i}: {scenario_name}")

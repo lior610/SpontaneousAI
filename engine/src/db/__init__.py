@@ -1,21 +1,7 @@
 """
-Database module for the Attraction Engine.
+Database module placeholder.
+Connection logic has moved to shared/python/db.
 """
-from .connection import (
-    get_db_connection,
-    get_connection,
-    return_connection,
-    test_connection,
-    close_pool,
-    init_pool
-)
 
-__all__ = [
-    'get_db_connection',
-    'get_connection',
-    'return_connection',
-    'test_connection',
-    'close_pool',
-    'init_pool'
-]
+__all__ = []
 

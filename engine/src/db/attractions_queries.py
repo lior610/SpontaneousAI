@@ -63,7 +63,7 @@ def fetch_similar_attractions(
 
     params: List[Any] = [embedding_str]
 
-    # Optional hard filters (non-semantic)
+    # hard filters (non-semantic)
     if filters:
         if effort_levels := filters.get("effort_levels"):
             query += " AND effort_level = ANY(%s)"

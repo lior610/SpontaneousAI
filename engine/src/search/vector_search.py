@@ -2,7 +2,15 @@
 Vector Search Module - Performs semantic similarity search using pgvector.
 """
 from typing import List, Dict, Any, Optional
-from src.db.attractionsConnection import get_db_connection
+import sys
+from pathlib import Path
+
+# Ensure shared python path is available
+shared_path = str(Path(__file__).resolve().parents[3] / "shared" / "python")
+if shared_path not in sys.path:
+    sys.path.insert(0, shared_path)
+
+from db.attractionsConnection import get_db_connection
 from src.db.attractions_queries import fetch_similar_attractions
 
 

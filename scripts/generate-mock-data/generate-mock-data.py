@@ -17,8 +17,8 @@ from db.usersConnection import get_db_connection as get_users_connection
 
 # --- CONFIGURATION ---
 NUM_ATTRACTIONS = 500
-NUM_USERS = 50
-NUM_TRIPS = 50 # 1 trip per user
+NUM_USERS = 1
+NUM_TRIPS =1 # 1 trip per user
 MODEL_NAME = 'all-MiniLM-L6-v2'
 
 print(f"Loading SBERT model '{MODEL_NAME}'...")
@@ -26,8 +26,20 @@ model = SentenceTransformer(MODEL_NAME)
 fake = Faker()
 
 # --- HELPER LISTS ---
-countries = ['USA', 'Israel', 'Germany', 'Japan', 'Brazil', 'France', 'UK']
-cities = ['New York', 'London', 'Tel Aviv', 'Tokyo', 'Paris', 'Berlin', 'Barcelona']
+countries = ['USA', 'Israel', 'Germany', 'Japan', 'France', 'UK', 'Greece', 'Spain']
+# Map cities to their correct countries for consistency
+city_country_map = {
+    'New York': 'USA',
+    'Arizona': 'USA',
+    'London': 'UK',
+    'Paris': 'France',
+    'Berlin': 'Germany',
+    'Athens': 'Greece',
+    'Tokyo': 'Japan',
+    'Tel Aviv': 'Israel',
+    'Barcelona': 'Spain',
+}
+cities = list(city_country_map.keys())
 age_groups = ['teen', '20s', '30s', '40+']
 travel_styles = ['budget', 'balanced', 'premium']
 paces = ['slow', 'normal', 'fast']
@@ -330,7 +342,7 @@ def generate_attractions_dataset(n):
         vector = model.encode(activity_embedding_text).tolist()
         
         city_name = random.choice(cities)
-        country_name = random.choice(countries)
+        country_name = city_country_map.get(city_name, random.choice(countries))
         created = fake.date_time_this_year()
         
         record = {
