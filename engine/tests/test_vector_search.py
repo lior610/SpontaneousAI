@@ -32,6 +32,8 @@ os.environ.setdefault('POSTGRES_PASSWORD', 'postgres')
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.search.vector_search import search_similar_attractions
+from src.search.hard_filters import build_hard_filters
+from src.search.soft_filters import apply_soft_filters, calculate_combined_score
 
 # --- CONFIGURATION ---
 NUM_QUERIES = 3      # Number of test scenarios to run
@@ -45,7 +47,7 @@ LOCATION_POOL = [
     ("Berlin", "Germany"),
     ("Athens", "Greece"),
     ("Tokyo", "Japan"),
-    ("Denver", "USA"),
+    ("Arizona", "USA"),
     ("Tel Aviv", "Israel"),
     ("New York", "USA"),
 ]
@@ -159,6 +161,181 @@ def check_relevance(result, expected_criteria):
     
     return score / checks if checks > 0 else 0
 
+
+def test_hard_filters():
+    """Test hard filter building functionality."""
+    print("\n" + "="*80)
+    print("🧪 TESTING HARD FILTERS")
+    print("="*80)
+    
+    # Test 1: Basic location filters
+    context1 = {"city": "Paris", "country": "France"}
+    filters1 = build_hard_filters(context1)
+    assert filters1 == {"city": "Paris", "country": "France"}, f"Expected location filters, got {filters1}"
+    print("✅ Test 1: Location filters work correctly")
+    
+    # Test 2: Availability filter
+    context2 = {"is_open_now": True}
+    filters2 = build_hard_filters(context2)
+    assert filters2 == {"is_open_now": True}, f"Expected open_now filter, got {filters2}"
+    print("✅ Test 2: Availability filter works correctly")
+    
+    # Test 3: Combined filters
+    context3 = {"city": "London", "country": "UK", "is_open_now": True}
+    filters3 = build_hard_filters(context3)
+    assert filters3 == {"city": "London", "country": "UK", "is_open_now": True}, f"Expected combined filters, got {filters3}"
+    print("✅ Test 3: Combined filters work correctly")
+    
+    # Test 4: Empty context
+    filters4 = build_hard_filters({})
+    assert filters4 == {}, f"Expected empty filters, got {filters4}"
+    print("✅ Test 4: Empty context returns empty filters")
+    
+    # Test 5: Ignore non-filter keys
+    context5 = {"city": "Berlin", "random_key": "should_be_ignored", "another_key": 123}
+    filters5 = build_hard_filters(context5)
+    assert "city" in filters5, "City filter should be included"
+    assert "random_key" not in filters5, "Non-filter keys should be ignored"
+    assert "another_key" not in filters5, "Non-filter keys should be ignored"
+    print("✅ Test 5: Non-filter keys are ignored")
+    
+    # Test 6: False values are ignored
+    context6 = {"city": "Tokyo", "is_open_now": False}
+    filters6 = build_hard_filters(context6)
+    assert "city" in filters6, "City filter should be included"
+    assert "is_open_now" not in filters6, "False values should be ignored"
+    print("✅ Test 6: False values are ignored")
+    
+    print("\n✅ All hard filter tests passed!\n")
+
+
+def test_soft_filters():
+    """Test soft filter functionality."""
+    print("\n" + "="*80)
+    print("🧪 TESTING SOFT FILTERS")
+    print("="*80)
+    
+    # Create mock results
+    mock_results = [
+        {"name": "Museum A", "similarity": 0.85, "rating": 4.5, "price_level": 2},
+        {"name": "Museum B", "similarity": 0.80, "rating": 4.8, "price_level": 1},
+        {"name": "Museum C", "similarity": 0.75, "rating": 3.9, "price_level": 3},
+    ]
+    
+    # Test 1: Empty context returns results unchanged
+    result1 = apply_soft_filters(mock_results, None)
+    assert result1 == mock_results, "Empty context should return results unchanged"
+    assert len(result1) == 3, "Should return all results"
+    print("✅ Test 1: Empty context returns results unchanged")
+    
+    # Test 2: Empty results list
+    result2 = apply_soft_filters([], {"some_context": "value"})
+    assert result2 == [], "Empty results should return empty list"
+    print("✅ Test 2: Empty results handled correctly")
+    
+    # Test 3: Results with context (currently placeholder, but should work)
+    result3 = apply_soft_filters(mock_results, {"preference": "budget"})
+    assert len(result3) == 3, "Should return all results (soft filters don't exclude)"
+    assert result3[0]["name"] == "Museum A", "Results should maintain order (placeholder)"
+    print("✅ Test 3: Soft filters work with context (placeholder implementation)")
+    
+    # Test 4: None context
+    result4 = apply_soft_filters(mock_results, None)
+    assert result4 == mock_results, "None context should return results unchanged"
+    print("✅ Test 4: None context handled correctly")
+    
+    print("\n✅ All soft filter tests passed!")
+    print("   Note: Soft filters are currently placeholders - implement scoring logic to enhance results\n")
+
+
+def test_combined_score():
+    """Test combined score calculation."""
+    print("\n" + "="*80)
+    print("🧪 TESTING COMBINED SCORE CALCULATION")
+    print("="*80)
+    
+    # Test 1: Basic similarity score (placeholder returns similarity unchanged)
+    attraction1 = {"name": "Test Attraction", "rating": 4.5}
+    score1 = calculate_combined_score(0.75, attraction1, None)
+    assert score1 == 0.75, f"Expected 0.75, got {score1}"
+    print("✅ Test 1: Basic similarity score works")
+    
+    # Test 2: Score with context (placeholder)
+    context2 = {"prefer_high_rating": True}
+    score2 = calculate_combined_score(0.80, attraction1, context2)
+    assert score2 == 0.80, "Placeholder should return similarity unchanged"
+    print("✅ Test 2: Score with context works (placeholder)")
+    
+    # Test 3: Edge cases
+    score3 = calculate_combined_score(0.0, attraction1, None)
+    assert score3 == 0.0, "Zero similarity should return 0.0"
+    print("✅ Test 3: Zero similarity handled")
+    
+    score4 = calculate_combined_score(1.0, attraction1, None)
+    assert score4 == 1.0, "Perfect similarity should return 1.0"
+    print("✅ Test 4: Perfect similarity handled")
+    
+    print("\n✅ All combined score tests passed!")
+    print("   Note: Combined scoring is currently a placeholder - implement logic to combine similarity + business factors\n")
+
+
+def test_filter_integration():
+    """Test integration of hard and soft filters with vector search."""
+    print("\n" + "="*80)
+    print("🧪 TESTING FILTER INTEGRATION WITH VECTOR SEARCH")
+    print("="*80)
+    
+    # Load model for embedding
+    print("📦 Loading Embedding Model...")
+    model = SentenceTransformer(MODEL_NAME)
+    
+    # Test query
+    query_text = "romantic dinner restaurant"
+    query_vector = model.encode(query_text).tolist()
+    
+    # Test 1: Hard filters only
+    context1 = {"city": "Paris", "country": "France"}
+    hard_filters1 = build_hard_filters(context1)
+    print(f"\n📍 Testing with hard filters: {hard_filters1}")
+    
+    results1 = search_similar_attractions(
+        query_embedding=query_vector,
+        limit=5,
+        filters=hard_filters1,
+    )
+    
+    if results1:
+        print(f"✅ Found {len(results1)} results with hard filters")
+        # Verify all results match filters
+        for result in results1:
+            assert result.get("city") == "Paris", f"Result should be in Paris, got {result.get('city')}"
+            assert result.get("country") == "France", f"Result should be in France, got {result.get('country')}"
+        print("✅ All results match hard filter constraints")
+    else:
+        print("⚠️  No results found (database may be empty or no matches)")
+    
+    # Test 2: Hard filters + soft filters
+    context2 = {"city": "Paris", "country": "France", "prefer_budget": True}
+    hard_filters2 = build_hard_filters(context2)
+    print(f"\n📍 Testing with hard filters + soft filters: {hard_filters2}")
+    
+    results2 = search_similar_attractions(
+        query_embedding=query_vector,
+        limit=5,
+        filters=hard_filters2,
+    )
+    
+    if results2:
+        print(f"✅ Found {len(results2)} results before soft filtering")
+        results2_filtered = apply_soft_filters(results2, context2)
+        assert len(results2_filtered) == len(results2), "Soft filters shouldn't exclude results"
+        print(f"✅ Soft filters applied: {len(results2_filtered)} results (same count, rankings may differ)")
+    else:
+        print("⚠️  No results found (database may be empty or no matches)")
+    
+    print("\n✅ Filter integration tests passed!\n")
+
+
 def run_evaluation(custom_query: str = None, custom_expected: dict = None):
     print(f"\n🚀 ATTRACTION ENGINE - CONTEXT-BASED RECOMMENDATION TEST")
     print(f"Simulating: System predicts next activity based on user state + context")
@@ -196,10 +373,11 @@ def run_evaluation(custom_query: str = None, custom_expected: dict = None):
         expected["city"] = city
         expected["country"] = country
 
-        base_filters = dict(test_case.get("filters", {}))
-        base_filters["city"] = city
-        base_filters["country"] = country
-        filters = base_filters
+        # Build hard filters using the new filter function
+        base_context = dict(test_case.get("filters", {}))
+        base_context["city"] = city
+        base_context["country"] = country
+        filters = build_hard_filters(base_context)
         
         print(f"\n{'='*80}")
         print(f"Scenario {i}: {scenario_name}")
@@ -217,6 +395,9 @@ def run_evaluation(custom_query: str = None, custom_expected: dict = None):
             limit=TOP_K,
             filters=filters,
         )
+        
+        # Apply soft filters (post-query scoring)
+        results = apply_soft_filters(results, base_context)
         
         end_time = time.time()
         latency = (end_time - start_time) * 1000
@@ -300,8 +481,23 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run vector search relevance tests.")
     parser.add_argument("--query", type=str, help="Custom query text to test (bypasses predefined scenarios).")
     parser.add_argument("--expected", type=str, help="Optional expected criteria as JSON string, e.g. '{\"categories\":\"Museum\",\"tags\":\"educational\"}'.")
+    parser.add_argument("--test-filters", action="store_true", help="Run filter function tests only.")
+    parser.add_argument("--test-integration", action="store_true", help="Run filter integration tests with vector search.")
     args = parser.parse_args()
 
+    # Run filter tests if requested
+    if args.test_filters:
+        test_hard_filters()
+        test_soft_filters()
+        test_combined_score()
+        sys.exit(0)
+    
+    # Run integration tests if requested
+    if args.test_integration:
+        test_filter_integration()
+        sys.exit(0)
+
+    # Run full evaluation
     custom_expected = None
     if args.expected:
         try:

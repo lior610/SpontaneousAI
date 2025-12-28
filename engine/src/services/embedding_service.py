@@ -1,62 +1,68 @@
 """
-Embedding Service - Handles text embeddings for vector search
-"""
-# TODO: Add embedding library (e.g., openai, sentence-transformers, etc.)
+Embedding Service - Text to Vector Conversion.
 
-async def generate_embedding(text: str) -> list[float]:
+This service handles the conversion of text into embedding vectors for semantic search.
+Embeddings are numerical representations of text that capture semantic meaning,
+allowing similarity comparisons between different texts.
+
+Flow: Text → Embedding Service → Vector → Vector Search → Database
+
+Note:
+    This is a placeholder service. Implementation should use:
+    - OpenAI embeddings API
+    - Sentence transformers (Hugging Face)
+    - Or other embedding models
+"""
+from typing import List
+
+
+async def generate_embedding(text: str) -> List[float]:
     """
-    Generate embedding vector from text
+    Generate a single embedding vector from text.
+    
+    This converts natural language text into a numerical vector representation
+    that can be used for semantic similarity search.
     
     Args:
-        text: Input text to embed
+        text: Input text to embed (e.g., "romantic dinner spots in Paris")
         
     Returns:
         List of floats representing the embedding vector
+        
+    Raises:
+        NotImplementedError: Embedding generation is not yet implemented
+        
+    Note:
+        When implementing, only embed fields with semantic meaning:
+        - Name, description, tags, categories
+        - Skip purely numerical or structural fields
     """
     # TODO: Implement embedding generation
-    # Example with OpenAI:
-    # import openai
-    # response = openai.embeddings.create(input=text, model="text-embedding-ada-002")
-    # return response.data[0].embedding
-    
-    # Example with sentence-transformers:
-    # from sentence_transformers import SentenceTransformer
-    # model = SentenceTransformer('all-MiniLM-L6-v2')
-    # return model.encode(text).tolist()
-    
+    # Options: OpenAI API, sentence-transformers, Hugging Face models
     raise NotImplementedError("Embedding generation not implemented")
 
-async def generate_embeddings_batch(texts: list[str]) -> list[list[float]]:
+
+async def generate_embeddings_batch(texts: List[str]) -> List[List[float]]:
     """
-    Generate embeddings for multiple texts (batch processing)
+    Generate embeddings for multiple texts in a single batch operation.
+    
+    Batch processing is more efficient than calling generate_embedding
+    multiple times, especially when using API-based embedding services.
     
     Args:
         texts: List of texts to embed
         
     Returns:
-        List of embedding vectors
+        List of embedding vectors, one per input text
+        
+    Raises:
+        NotImplementedError: Batch embedding generation is not yet implemented
+        
+    Note:
+        Maintains order: results[i] corresponds to texts[i]
     """
     # TODO: Implement batch embedding generation
     # More efficient than calling generate_embedding multiple times
     raise NotImplementedError("Batch embedding generation not implemented")
 
-def calculate_similarity(embedding1: list[float], embedding2: list[float]) -> float:
-    """
-    Calculate cosine similarity between two embeddings
-    
-    Args:
-        embedding1: First embedding vector
-        embedding2: Second embedding vector
-        
-    Returns:
-        Similarity score between 0 and 1
-    """
-    # TODO: Implement cosine similarity calculation
-    # import numpy as np
-    # dot_product = np.dot(embedding1, embedding2)
-    # norm1 = np.linalg.norm(embedding1)
-    # norm2 = np.linalg.norm(embedding2)
-    # return dot_product / (norm1 * norm2)
-    
-    raise NotImplementedError("Similarity calculation not implemented")
 

@@ -337,8 +337,14 @@ def generate_attractions_dataset(n):
         is_outdoor = cat in ['Park', 'Hiking', 'Historical']
         indoor_outdoor = 'outdoor' if is_outdoor else 'indoor'
         
-        # Build embedding text from all semantic fields
-        activity_embedding_text = f"{short_description} Categories: {cat}. Tags: {', '.join(tags)}. Good for: {', '.join(good_for)}. {indoor_outdoor}. {vibe}."
+        # Build embedding text from semantic fields only (exclude hard constraints like indoor/outdoor, effort, duration)
+        activity_embedding_text = (
+            f"{short_description} "
+            f"Categories: {cat}. "
+            f"Tags: {', '.join(tags)}. "
+            f"Good for: {', '.join(good_for)}. "
+            f"Vibe: {vibe}."
+        )
         vector = model.encode(activity_embedding_text).tolist()
         
         city_name = random.choice(cities)

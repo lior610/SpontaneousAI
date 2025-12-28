@@ -1,8 +1,95 @@
 """
-Data access layer for attractions-related queries.
-Manage attraction SQL queries.
+Database Query Layer for Attractions.
+
+This module contains pure SQL query construction and execution.
+It does NOT contain business logic - it only applies filters and queries
+that are passed in from higher layers.
+
+Responsibilities:
+- Build SQL queries with filters
+- Execute queries against the database
+- Return raw database results
+
+Flow: Vector Search → Attractions Queries → PostgreSQL
 """
 from typing import List, Tuple, Optional, Any, Dict
+
+
+def _apply_filters(query: str, params: List[Any], filters: Dict[str, Any]) -> Tuple[str, List[Any]]:
+    """
+    Append WHERE clauses for filters passed from the service layer.
+    
+    This function applies whatever filters it receives - it does NOT decide
+    which filters are "hard" or "soft". That decision is made in the service layer.
+    
+    Filter keys must match database column names exactly (no mapping needed).
+    
+    Supported filter types:
+    - Equality filters: {"country": "France"} -> "country = %s"
+    - Boolean filters: {"is_open_now": True} -> "is_open_now = TRUE"
+    
+    Args:
+        query: SQL query string (must already have a WHERE clause)
+        params: List of query parameters
+        filters: Dictionary of filters to apply (keys = database column names)
+        
+    Returns:
+        Tuple of (modified query string, updated parameters list)
+    """
+    for column_name, filter_value in filters.items():
+        if filter_value is None:
+            continue
+        
+        # Handle boolean filters
+        if isinstance(filter_value, bool):
+            if filter_value:
+                query += f" AND {column_name} = TRUE"
+            else:
+                query += f" AND {column_name} = FALSE"
+        # Handle equality filters
+        else:
+            query += f" AND {column_name} = %s"
+            params.append(filter_value)
+    
+    return query, params
+
+
+def _apply_similarity_constraints(
+    query: str,
+    params: List[Any],
+    embedding_str: str,
+    min_similarity: Optional[float],
+    limit: int,
+) -> Tuple[str, List[Any]]:
+    """
+    Append similarity threshold and ordering clauses.
+    
+    Uses pgvector cosine distance operator (<=>) for similarity calculation.
+    Similarity score = 1 - (distance / 2), where distance is 0-2.
+    
+    Args:
+        query: SQL query string
+        params: List of query parameters
+        embedding_str: Embedding in pgvector string format
+        min_similarity: Optional minimum similarity threshold (0-1)
+        limit: Maximum number of results
+        
+    Returns:
+        Tuple of (modified query string, updated parameters list)
+    """
+    # Apply minimum similarity threshold if specified
+    if min_similarity is not None:
+        # Convert similarity (0-1) to max distance (0-2)
+        # similarity = 1 - (distance / 2)  =>  distance = 2 * (1 - similarity)
+        max_distance = 2 * (1 - min_similarity)
+        query += " AND (embedding <=> %s::vector) <= %s"
+        params.extend([embedding_str, max_distance])
+
+    # Order by similarity (ascending distance = descending similarity)
+    query += " ORDER BY embedding <=> %s::vector LIMIT %s"
+    params.extend([embedding_str, limit])
+    
+    return query, params
 
 
 def fetch_similar_attractions(
@@ -13,19 +100,30 @@ def fetch_similar_attractions(
     filters: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[Tuple[Any, ...]], List[str]]:
     """
-    Fetch attractions ordered by vector similarity.
-
+    Execute database query to fetch attractions ordered by vector similarity.
+    
+    This is a pure database query function. It:
+    1. Builds the SQL query with filters
+    2. Executes the query
+    3. Returns raw database results
+    
     Args:
-        conn: psycopg2 connection
-        embedding_str: embedding formatted as pgvector string "[0.1,0.2,...]"
-        limit: number of results
-        min_similarity: optional similarity threshold (0-1)
-
+        conn: psycopg2 database connection
+        embedding_str: Embedding in pgvector string format "[0.1,0.2,...]"
+        limit: Maximum number of results to return
+        min_similarity: Optional minimum similarity threshold (0-1)
+        filters: Optional dictionary of hard filters (city, country, is_open_now, etc.)
+        
     Returns:
-        rows: list of tuples
-        column_names: list of column names matching row order
+        Tuple of:
+        - rows: List of tuples, each tuple is one attraction row
+        - column_names: List of column names matching the row order
+        
+    Note:
+        The similarity score is calculated as: 1 - (cosine_distance / 2)
+        This gives a score from 0-1 where 1 is identical and 0 is completely different.
     """
-    # Base query
+    # Base query: select all attraction fields plus similarity score
     query = """
         SELECT 
             activity_id,
@@ -63,65 +161,20 @@ def fetch_similar_attractions(
 
     params: List[Any] = [embedding_str]
 
-    # hard filters (non-semantic)
+    # Apply filters (service layer decides which filters to pass)
     if filters:
-        if effort_levels := filters.get("effort_levels"):
-            query += " AND effort_level = ANY(%s)"
-            params.append(effort_levels)
+        query, params = _apply_filters(query, params, filters)
 
-        if indoor_outdoor := filters.get("indoor_outdoor"):
-            query += " AND indoor_outdoor = %s"
-            params.append(indoor_outdoor)
+    # Apply similarity constraints and ordering
+    query, params = _apply_similarity_constraints(
+        query=query,
+        params=params,
+        embedding_str=embedding_str,
+        min_similarity=min_similarity,
+        limit=limit,
+    )
 
-        if max_duration := filters.get("max_duration_min"):
-            query += " AND typical_duration_min <= %s"
-            params.append(max_duration)
-
-        if include_categories := filters.get("include_categories"):
-            query += " AND categories = ANY(%s)"
-            params.append(include_categories)
-
-        if exclude_categories := filters.get("exclude_categories"):
-            query += " AND categories <> ALL(%s)"
-            params.append(exclude_categories)
-
-        if price_level_max := filters.get("price_level_max"):
-            query += " AND price_level <= %s"
-            params.append(price_level_max)
-
-        if country := filters.get("country"):
-            query += " AND country = %s"
-            params.append(country)
-
-        if city := filters.get("city"):
-            query += " AND city = %s"
-            params.append(city)
-
-        if countries := filters.get("countries"):
-            query += " AND country = ANY(%s)"
-            params.append(countries)
-
-        if cities := filters.get("cities"):
-            query += " AND city = ANY(%s)"
-            params.append(cities)
-
-        if require_accessible := filters.get("accessibility_required"):
-            query += " AND accessibility_features = TRUE"
-
-        if require_booking_false := filters.get("requires_booking_false"):
-            query += " AND requires_booking = FALSE"
-
-        if open_now := filters.get("open_now"):
-            query += " AND is_open_now = TRUE"
-
-    if min_similarity is not None:
-        max_distance = 2 * (1 - min_similarity)  # Convert similarity to distance
-        query += " AND (embedding <=> %s::vector) <= %s"
-        params.extend([embedding_str, max_distance])
-
-    query += " ORDER BY embedding <=> %s::vector LIMIT %s"
-    params.extend([embedding_str, limit])
-
+    # Execute query
     cursor = conn.cursor()
     cursor.execute(query, tuple(params))
     rows = cursor.fetchall()

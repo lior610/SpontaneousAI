@@ -1,5 +1,13 @@
 """
-Vector Search Module - Performs semantic similarity search using pgvector.
+Vector Search Data Access Layer.
+
+This module handles the data access for vector similarity search operations.
+It sits between the service layer and the database query layer, handling:
+- Connection management
+- Result formatting
+- Error handling
+
+Flow: Service Layer → Vector Search → Database Queries → Database
 """
 from typing import List, Dict, Any, Optional
 import sys
@@ -12,26 +20,7 @@ if shared_path not in sys.path:
 
 from db.attractionsConnection import get_db_connection
 from src.db.attractions_queries import fetch_similar_attractions
-
-
-def _to_pgvector_str(query_embedding: Any) -> str:
-    """Convert embedding to pgvector format string."""
-    if isinstance(query_embedding, str):
-        return query_embedding
-    if hasattr(query_embedding, "__iter__"):
-        return "[" + ",".join(map(str, query_embedding)) + "]"
-    raise ValueError("query_embedding must be a list of floats or a string")
-
-
-def _normalize_row(row_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalize data types for the response."""
-    if row_dict.get("activity_id"):
-        row_dict["activity_id"] = str(row_dict["activity_id"])
-    if row_dict.get("embedding"):
-        row_dict["embedding"] = list(row_dict["embedding"])
-    if "similarity" in row_dict:
-        row_dict["similarity"] = float(row_dict["similarity"])
-    return row_dict
+from src.utils.formatting import format_embedding_for_pgvector, normalize_attraction_row
 
 
 def search_similar_attractions(
@@ -41,20 +30,31 @@ def search_similar_attractions(
     filters: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Find attractions similar to the query embedding.
-
+    Execute vector similarity search and return formatted results.
+    
+    This is the data access layer for vector search. It:
+    1. Formats the embedding for database queries
+    2. Executes the database query via attractions_queries
+    3. Formats and normalizes the results
+    4. Handles errors
+    
     Args:
         query_embedding: Embedding vector (list of floats)
-        limit: Return top X results (default: 10)
-        min_similarity: Optional minimum similarity score (0-1, where 1 = identical)
-
+        limit: Maximum number of results to return (default: 10)
+        min_similarity: Optional minimum similarity threshold (0-1, where 1 = identical)
+        filters: Optional dictionary of hard filters (city, country, is_open_now, etc.)
+    
     Returns:
-        List of attraction dicts with a 'similarity' score (0-1, higher = more similar)
+        List of attraction dictionaries, each with a 'similarity' score (0-1, higher = more similar)
+        
+    Raises:
+        RuntimeError: If database query fails
+        ValueError: If embedding format is invalid
     """
     if not query_embedding:
         return []
 
-    embedding_str = _to_pgvector_str(query_embedding)
+    embedding_str = format_embedding_for_pgvector(query_embedding)
     results: List[Dict[str, Any]] = []
 
     try:
@@ -67,9 +67,10 @@ def search_similar_attractions(
                 filters=filters or {},
             )
 
+            # Convert database rows to dictionaries and normalize types
             for row in rows:
                 attraction = dict(zip(column_names, row))
-                results.append(_normalize_row(attraction))
+                results.append(normalize_attraction_row(attraction))
 
     except Exception as e:
         raise RuntimeError(f"Error performing vector search: {str(e)}") from e
