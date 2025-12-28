@@ -1,24 +1,39 @@
 """
-Attraction models/schemas for request/response validation
+Attraction models/schemas for request/response validation.
+Aligned with the attractions table and vector search output.
 """
-from pydantic import BaseModel
 from typing import Optional
+from pydantic import BaseModel
+
 
 class AttractionBase(BaseModel):
-    """Base attraction schema"""
-    # TODO: Add more fields as needed
     name: str
-    description: Optional[str] = None
-    location: Optional[str] = None
+    short_description: Optional[str] = None
+    categories: Optional[str] = None
+    tags: Optional[str] = None
+    good_for: Optional[str] = None
+    indoor_outdoor: Optional[str] = None
+    typical_duration_min: Optional[int] = None
+    effort_level: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    price_level: Optional[int] = None
+    rating: Optional[float] = None
+    requires_booking: Optional[bool] = None
+    age_min: Optional[int] = None
+    accessibility_features: Optional[bool] = None
+    similarity: Optional[float] = None  # returned by vector search
+
 
 class AttractionCreate(AttractionBase):
     """Schema for creating an attraction"""
     pass
 
+
 class AttractionResponse(AttractionBase):
     """Schema for attraction response"""
-    id: int
-    
+    activity_id: str
+
     class Config:
         from_attributes = True
 
