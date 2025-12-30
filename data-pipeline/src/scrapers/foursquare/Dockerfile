@@ -19,5 +19,5 @@ COPY . .
 ENV PYTHONPATH=/app:/shared-python
 
 # Default command (can be overridden by docker-compose)
-CMD ["python", "src/main.py"]
+CMD ["python", "main.py"]
 
