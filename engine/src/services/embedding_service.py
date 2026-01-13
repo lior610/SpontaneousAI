@@ -14,6 +14,18 @@ Note:
     - Or other embedding models
 """
 from typing import List
+from sentence_transformers import SentenceTransformer
+import asyncio
+from functools import lru_cache
+
+# Model name constant - shared across the codebase
+MODEL_NAME = 'all-MiniLM-L6-v2'
+
+# Cache the model instance to avoid reloading
+@lru_cache(maxsize=1)
+def _get_model() -> SentenceTransformer:
+    """Get or create the SentenceTransformer model instance (cached)."""
+    return SentenceTransformer(MODEL_NAME)
 
 
 async def generate_embedding(text: str) -> List[float]:
@@ -29,17 +41,15 @@ async def generate_embedding(text: str) -> List[float]:
     Returns:
         List of floats representing the embedding vector
         
-    Raises:
-        NotImplementedError: Embedding generation is not yet implemented
-        
     Note:
         When implementing, only embed fields with semantic meaning:
         - Name, description, tags, categories
         - Skip purely numerical or structural fields
     """
-    # TODO: Implement embedding generation
-    # Options: OpenAI API, sentence-transformers, Hugging Face models
-    raise NotImplementedError("Embedding generation not implemented")
+    model = _get_model()
+    # Run encoding in thread pool to avoid blocking
+    embedding = await asyncio.to_thread(model.encode, text)
+    return embedding.tolist()
 
 
 async def generate_embeddings_batch(texts: List[str]) -> List[List[float]]:
@@ -55,14 +65,25 @@ async def generate_embeddings_batch(texts: List[str]) -> List[List[float]]:
     Returns:
         List of embedding vectors, one per input text
         
-    Raises:
-        NotImplementedError: Batch embedding generation is not yet implemented
-        
     Note:
         Maintains order: results[i] corresponds to texts[i]
     """
-    # TODO: Implement batch embedding generation
-    # More efficient than calling generate_embedding multiple times
-    raise NotImplementedError("Batch embedding generation not implemented")
+    model = _get_model()
+    # Run batch encoding in thread pool to avoid blocking
+    embeddings = await asyncio.to_thread(model.encode, texts)
+    return [emb.tolist() for emb in embeddings]
+
+
+def get_embedding_dimension() -> int:
+    """
+    Get the dimension of embeddings produced by the model.
+    
+    This is useful for database schema creation and validation.
+    
+    Returns:
+        Integer representing the embedding vector dimension
+    """
+    model = _get_model()
+    return model.get_sentence_embedding_dimension()
 
 

@@ -1,28 +1,31 @@
 import pandas as pd
 import numpy as np
-from sentence_transformers import SentenceTransformer
 from faker import Faker
 import random
 import time
-import os
 import sys
+import asyncio
 from datetime import datetime
+from pathlib import Path
 
 # Import shared database connection modules
-# Add shared-python to path if not already there
-if '/shared-python' not in sys.path:
-    sys.path.insert(0, '/shared-python')
+shared_path = str(Path(__file__).resolve().parents[2] / "shared" / "python")
+if shared_path not in sys.path:
+    sys.path.insert(0, shared_path)
 from db.attractionsConnection import get_db_connection as get_attractions_connection
 from db.usersConnection import get_db_connection as get_users_connection
+
+# Import embedding service
+engine_path = str(Path(__file__).resolve().parents[2] / "engine" / "src")
+if engine_path not in sys.path:
+    sys.path.insert(0, engine_path)
+from services.embedding_service import generate_embeddings_batch, get_embedding_dimension
 
 # --- CONFIGURATION ---
 NUM_ATTRACTIONS = 500
 NUM_USERS = 1
 NUM_TRIPS =1 # 1 trip per user
-MODEL_NAME = 'all-MiniLM-L6-v2'
 
-print(f"Loading SBERT model '{MODEL_NAME}'...")
-model = SentenceTransformer(MODEL_NAME)
 fake = Faker()
 
 # --- HELPER LISTS ---
@@ -49,10 +52,12 @@ vibes = ['chill', 'social', 'adventure', 'romantic', 'quiet', 'educational']
 good_for_options = ['solo', 'couple', 'friends', 'kids']
 sources = ['google_maps', 'tripadvisor', 'yelp']
 # --- 1. GENERATE USERS (FULL SCHEMA) ---
-def generate_users_dataset(n):
+async def generate_users_dataset(n):
     print(f"Generating {n} users (Full Schema)...")
     users = []
+    user_texts = []
     
+    # First pass: collect all user data and texts for embedding
     for _ in range(n):
         uid = fake.uuid4()
         
@@ -74,8 +79,7 @@ def generate_users_dataset(n):
         top_interests = sorted(prefs, key=prefs.get, reverse=True)[:3]
         clean_interests = [k.replace('pref_', '') for k in top_interests]
         user_desc_text = f"I am a traveler who loves {', '.join(clean_interests)}."
-        user_vector = model.encode(user_desc_text).tolist()
-
+        
         created = fake.date_time_this_year()
         record = {
             "user_id": uid,
@@ -95,9 +99,17 @@ def generate_users_dataset(n):
             "tiredness_level": round(random.random(), 2),
             "hunger_level": round(random.random(), 2),
             "energy_level": round(random.random(), 2) if random.random() > 0.1 else None,
-            "preference_vector": user_vector
+            "preference_vector": None  # Will be filled after batch embedding
         }
         users.append(record)
+        user_texts.append(user_desc_text)
+    
+    # Batch generate all embeddings at once
+    user_vectors = await generate_embeddings_batch(user_texts)
+    
+    # Assign embeddings back to records
+    for i, user_vector in enumerate(user_vectors):
+        users[i]["preference_vector"] = user_vector
         
     return pd.DataFrame(users)
 
@@ -318,12 +330,14 @@ def generate_realistic_name(category):
     return random.choice(name_templates.get(category, [f"{fake.company()} {category}"]))
 
 # --- 3. GENERATE ATTRACTIONS (FULL SCHEMA) ---
-def generate_attractions_dataset(n):
+async def generate_attractions_dataset(n):
     print(f"Generating {n} attractions (Full Schema)...")
     data = []
+    activity_texts = []
     categories_list = ['Museum', 'Park', 'Restaurant', 'Cafe', 'Bar', 'Historical', 'Shopping', 'Hiking', 'Cinema', 'Theater']
     tags_list = ['chill', 'romantic', 'kids', 'adventure', 'educational', 'social', 'quiet', 'lively']
     
+    # First pass: collect all attraction data and texts for embedding
     for _ in range(n):
         cat = random.choice(categories_list)
         tags = random.sample(tags_list, random.randint(1, 3))
@@ -345,7 +359,6 @@ def generate_attractions_dataset(n):
             f"Good for: {', '.join(good_for)}. "
             f"Vibe: {vibe}."
         )
-        vector = model.encode(activity_embedding_text).tolist()
         
         city_name = random.choice(cities)
         country_name = city_country_map.get(city_name, random.choice(countries))
@@ -379,9 +392,17 @@ def generate_attractions_dataset(n):
             "requires_booking": fake.boolean(),
             "age_min": random.choice([0, 0, 18, 21]) if random.random() > 0.3 else None,
             "accessibility_features": fake.boolean(),
-            "embedding": vector
+            "embedding": None  # Will be filled after batch embedding
         }
         data.append(record)
+        activity_texts.append(activity_embedding_text)
+    
+    # Batch generate all embeddings at once
+    activity_vectors = await generate_embeddings_batch(activity_texts)
+    
+    # Assign embeddings back to records
+    for i, vector in enumerate(activity_vectors):
+        data[i]["embedding"] = vector
         
     return pd.DataFrame(data)
 
@@ -393,7 +414,7 @@ def create_tables(att_conn, users_conn):
     # 1. ATTRACTIONS TABLE (Vector DB)
     cur_att = att_conn.cursor()
     cur_att.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-    embedding_dim = model.get_sentence_embedding_dimension()
+    embedding_dim = get_embedding_dimension()
     
     # Check if table exists and has old schema (check for old 'id' column instead of 'activity_id')
     cur_att.execute("""
@@ -656,13 +677,13 @@ def insert_data(att_conn, users_conn, df_att, df_users, df_trips):
     print(f"✓ Processed trips: {trips_inserted} inserted, {trips_skipped} skipped (already exist).")
 
 # --- MAIN EXECUTION ---
-def main():
+async def main():
     print("=== SPONTANEOUS AI MOCK DATA GENERATOR ===")
     
     # 1. Generate Pandas DataFrames
-    df_users = generate_users_dataset(NUM_USERS)
+    df_users = await generate_users_dataset(NUM_USERS)
     df_trips = generate_trips_dataset(df_users)
-    df_att = generate_attractions_dataset(NUM_ATTRACTIONS)
+    df_att = await generate_attractions_dataset(NUM_ATTRACTIONS)
     
     # 2. Connect to DBs and Create Tables & Insert
     try:
@@ -677,4 +698,4 @@ def main():
         return
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
