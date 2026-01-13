@@ -19,11 +19,11 @@ if shared_path not in sys.path:
     sys.path.insert(0, shared_path)
 
 from db.attractionsConnection import get_db_connection
-from src.db.attractions_queries import fetch_similar_attractions
+from src.db.attractions_queries import execute_similarity_query
 from src.utils.formatting import format_embedding_for_pgvector, normalize_attraction_row
 
 
-def search_similar_attractions(
+def execute_vector_search( 
     query_embedding: List[float],
     limit: int = 10,
     min_similarity: Optional[float] = None,
@@ -59,7 +59,7 @@ def search_similar_attractions(
 
     try:
         with get_db_connection() as conn:
-            rows, column_names = fetch_similar_attractions(
+            rows, column_names = execute_similarity_query(
                 conn=conn,
                 embedding_str=embedding_str,
                 limit=limit,

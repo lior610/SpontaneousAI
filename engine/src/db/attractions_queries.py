@@ -92,7 +92,7 @@ def _apply_similarity_constraints(
     return query, params
 
 
-def fetch_similar_attractions(
+def execute_similarity_query(
     conn,
     embedding_str: str,
     limit: int = 10,

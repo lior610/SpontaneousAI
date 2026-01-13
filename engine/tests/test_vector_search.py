@@ -31,7 +31,7 @@ os.environ.setdefault('POSTGRES_PASSWORD', 'postgres')
 # Add parent directory to path so we can import src
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.search.vector_search import search_similar_attractions
+from src.search.vector_search import execute_vector_search
 from src.search.hard_filters import build_hard_filters
 from src.search.soft_filters import apply_soft_filters, calculate_combined_score
 
@@ -298,7 +298,7 @@ def test_filter_integration():
     hard_filters1 = build_hard_filters(context1)
     print(f"\n📍 Testing with hard filters: {hard_filters1}")
     
-    results1 = search_similar_attractions(
+    results1 = execute_vector_search(
         query_embedding=query_vector,
         limit=5,
         filters=hard_filters1,
@@ -319,7 +319,7 @@ def test_filter_integration():
     hard_filters2 = build_hard_filters(context2)
     print(f"\n📍 Testing with hard filters + soft filters: {hard_filters2}")
     
-    results2 = search_similar_attractions(
+    results2 = execute_vector_search(
         query_embedding=query_vector,
         limit=5,
         filters=hard_filters2,
@@ -390,7 +390,7 @@ def run_evaluation(custom_query: str = None, custom_expected: dict = None):
         query_vector = model.encode(query_text).tolist()
         
         # Use the actual search function from vector_search.py
-        results = search_similar_attractions(
+        results = execute_vector_search(
             query_embedding=query_vector,
             limit=TOP_K,
             filters=filters,

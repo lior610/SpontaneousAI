@@ -63,17 +63,17 @@ API Routes → Service Layer → Data Access Layer → Database
    - `search_attractions()`:
      - Calls `generate_embedding()` to convert query text to vector
      - Calls `build_search_filters()` to create filter dictionary
-     - Calls `search_similar_attractions()` from data access layer
+     - Calls `execute_vector_search()` from data access layer
 
 3. **Data Access Layer** (`search/vector_search.py`)
-   - `search_similar_attractions()`:
+   - `execute_vector_search()`:
      - Formats embedding using `format_embedding_for_pgvector()`
-     - Calls `fetch_similar_attractions()` from database layer
+     - Calls `execute_similarity_query()` from database layer
      - Normalizes results using `normalize_attraction_row()`
      - Returns formatted results
 
 4. **Database Layer** (`db/attractions_queries.py`)
-   - `fetch_similar_attractions()`:
+   - `execute_similarity_query()`:
      - Builds SQL query with filters
      - Executes query against PostgreSQL
      - Returns raw database results
@@ -89,7 +89,8 @@ API Routes → Service Layer → Data Access Layer → Database
 ## Function Naming Conventions
 
 - **Service functions**: Business operations (e.g., `search_attractions`, `create_attraction`)
-- **Data access functions**: Data operations (e.g., `search_similar_attractions`, `fetch_similar_attractions`)
+- **Data access functions**: Data operations (e.g., `execute_vector_search`)
+- **Database query functions**: SQL execution (e.g., `execute_similarity_query`)
 - **Utility functions**: Formatting/transformation (e.g., `format_embedding_for_pgvector`)
 - **Private helpers**: Prefixed with `_` (e.g., `_apply_hard_filters`)
 

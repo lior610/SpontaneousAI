@@ -25,7 +25,7 @@ if shared_path not in sys.path:
     sys.path.insert(0, shared_path)
 
 from src.services.embedding_service import generate_embedding
-from src.search.vector_search import search_similar_attractions
+from src.search.vector_search import execute_vector_search
 from src.search.hard_filters import build_hard_filters
 from src.search.soft_filters import apply_soft_filters
 
@@ -106,7 +106,7 @@ async def search_attractions(
     hard_filters = build_hard_filters(context or {})
     
     # Step 3: Execute vector similarity search
-    results = search_similar_attractions(
+    results = execute_vector_search(
         query_embedding=query_embedding,
         limit=limit,
         min_similarity=min_similarity,
