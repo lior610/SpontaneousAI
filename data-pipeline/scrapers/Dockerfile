@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
 
 # Install Python dependencies
 COPY requirements.txt .
+COPY ./src/main.py .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the code

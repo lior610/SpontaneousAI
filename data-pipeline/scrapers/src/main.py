@@ -160,7 +160,7 @@ def run_scraping_cycle(data_file: str, batch_size: int = 100) -> None:
     save_data(data_file, updated_data)
 
 def main():
-    DATA_FILE = os.getenv("FOURSQUARE_OUTPUT_FILE", "foursquare_ny_attractions.json")
+    DATA_FILE = os.getenv("FOURSQUARE_OUTPUT_FILE", "foursquare_london_attractions.json")
     
     while True:
         try:
