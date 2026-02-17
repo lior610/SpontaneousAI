@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Sparkles, MapPin, Clock, Compass, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import heroMap from '@/assets/hero-map.png';
@@ -51,9 +51,14 @@ export function LandingPage() {
             </div>
             <span className="text-xl font-bold text-gradient-hero">Spontaneous AI</span>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/trip')}>
-            Start Trip →
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/login">Login</Link>
+            </Button>
+            <Button variant="default" size="sm" onClick={() => navigate('/wizard')}>
+              Start Trip →
+            </Button>
+          </div>
         </header>
 
         {/* Main Hero Content */}
@@ -79,19 +84,11 @@ export function LandingPage() {
               <Button 
                 variant="hero" 
                 size="xl"
-                onClick={() => navigate('/login')}
+                onClick={() => navigate('/wizard')}
                 className="w-full sm:w-auto"
               >
                 Start Your Trip
                 <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-              <Button 
-                variant="outline" 
-                size="lg"
-                onClick={() => navigate('/trip')}
-                className="w-full sm:w-auto"
-              >
-                See Demo
               </Button>
             </div>
 
@@ -192,7 +189,7 @@ export function LandingPage() {
           <Button 
             variant="hero" 
             size="xl"
-            onClick={() => navigate('/login')}
+            onClick={() => navigate('/wizard')}
           >
             Start Planning Now
             <ArrowRight className="w-5 h-5 ml-2" />
