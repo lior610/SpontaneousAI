@@ -1,62 +1,89 @@
 """
-Embedding Service - Handles text embeddings for vector search
-"""
-# TODO: Add embedding library (e.g., openai, sentence-transformers, etc.)
+Embedding Service - Text to Vector Conversion.
 
-async def generate_embedding(text: str) -> list[float]:
+This service handles the conversion of text into embedding vectors for semantic search.
+Embeddings are numerical representations of text that capture semantic meaning,
+allowing similarity comparisons between different texts.
+
+Flow: Text → Embedding Service → Vector → Vector Search → Database
+
+Note:
+    This is a placeholder service. Implementation should use:
+    - OpenAI embeddings API
+    - Sentence transformers (Hugging Face)
+    - Or other embedding models
+"""
+from typing import List
+from sentence_transformers import SentenceTransformer
+import asyncio
+from functools import lru_cache
+
+# Model name constant - shared across the codebase
+MODEL_NAME = 'all-MiniLM-L6-v2'
+
+# Cache the model instance to avoid reloading
+@lru_cache(maxsize=1)
+def _get_model() -> SentenceTransformer:
+    """Get or create the SentenceTransformer model instance (cached)."""
+    return SentenceTransformer(MODEL_NAME)
+
+
+async def generate_embedding(text: str) -> List[float]:
     """
-    Generate embedding vector from text
+    Generate a single embedding vector from text.
+    
+    This converts natural language text into a numerical vector representation
+    that can be used for semantic similarity search.
     
     Args:
-        text: Input text to embed
+        text: Input text to embed (e.g., "romantic dinner spots in Paris")
         
     Returns:
         List of floats representing the embedding vector
+        
+    Note:
+        When implementing, only embed fields with semantic meaning:
+        - Name, description, tags, categories
+        - Skip purely numerical or structural fields
     """
-    # TODO: Implement embedding generation
-    # Example with OpenAI:
-    # import openai
-    # response = openai.embeddings.create(input=text, model="text-embedding-ada-002")
-    # return response.data[0].embedding
-    
-    # Example with sentence-transformers:
-    # from sentence_transformers import SentenceTransformer
-    # model = SentenceTransformer('all-MiniLM-L6-v2')
-    # return model.encode(text).tolist()
-    
-    raise NotImplementedError("Embedding generation not implemented")
+    model = _get_model()
+    # Run encoding in thread pool to avoid blocking
+    embedding = await asyncio.to_thread(model.encode, text)
+    return embedding.tolist()
 
-async def generate_embeddings_batch(texts: list[str]) -> list[list[float]]:
+
+async def generate_embeddings_batch(texts: List[str]) -> List[List[float]]:
     """
-    Generate embeddings for multiple texts (batch processing)
+    Generate embeddings for multiple texts in a single batch operation.
+    
+    Batch processing is more efficient than calling generate_embedding
+    multiple times, especially when using API-based embedding services.
     
     Args:
         texts: List of texts to embed
         
     Returns:
-        List of embedding vectors
-    """
-    # TODO: Implement batch embedding generation
-    # More efficient than calling generate_embedding multiple times
-    raise NotImplementedError("Batch embedding generation not implemented")
-
-def calculate_similarity(embedding1: list[float], embedding2: list[float]) -> float:
-    """
-    Calculate cosine similarity between two embeddings
-    
-    Args:
-        embedding1: First embedding vector
-        embedding2: Second embedding vector
+        List of embedding vectors, one per input text
         
-    Returns:
-        Similarity score between 0 and 1
+    Note:
+        Maintains order: results[i] corresponds to texts[i]
     """
-    # TODO: Implement cosine similarity calculation
-    # import numpy as np
-    # dot_product = np.dot(embedding1, embedding2)
-    # norm1 = np.linalg.norm(embedding1)
-    # norm2 = np.linalg.norm(embedding2)
-    # return dot_product / (norm1 * norm2)
+    model = _get_model()
+    # Run batch encoding in thread pool to avoid blocking
+    embeddings = await asyncio.to_thread(model.encode, texts)
+    return [emb.tolist() for emb in embeddings]
+
+
+def get_embedding_dimension() -> int:
+    """
+    Get the dimension of embeddings produced by the model.
     
-    raise NotImplementedError("Similarity calculation not implemented")
+    This is useful for database schema creation and validation.
+    
+    Returns:
+        Integer representing the embedding vector dimension
+    """
+    model = _get_model()
+    return model.get_sentence_embedding_dimension()
+
 

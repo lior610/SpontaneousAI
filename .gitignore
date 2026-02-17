@@ -78,6 +78,7 @@ logs/
 # Exclude local secret/config files
 .env.local
 /.env
+*.csv
 
 # Uncomment to ignore lockfiles if using a package manager that you prefer not to commit
 # package-lock.json
