@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
+import { getCurrentUser } from '@/services/authService';
 import { 
   Calendar, MapPin, ArrowRight, ArrowLeft, Check,
   UtensilsCrossed, TreePine, Theater, PartyPopper, 
@@ -32,9 +33,24 @@ export default function WizardPage() {
   const [tripSetup, setTripSetup] = useState<TripSetup>({ ...defaultTripSetup });
   const [wizardStep, setWizardStep] = useState(1);
   const [localDestination, setLocalDestination] = useState(tripSetup.destination);
-  
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Require login: redirect to login if not authenticated
+  const user = getCurrentUser();
+  useEffect(() => {
+    if (!user) {
+      navigate('/login', { replace: true });
+    }
+  }, [navigate, user]);
+
   const startDateRef = useRef<HTMLInputElement>(null);
   const endDateRef = useRef<HTMLInputElement>(null);
+
+  // Don't render wizard content until we know user is logged in (avoids flash before redirect)
+  if (!user) {
+    return null;
+  }
 
   const updatePreferences = (update: Partial<TripPreferences>) => {
     setTripSetup(prev => ({
@@ -58,8 +74,18 @@ export default function WizardPage() {
       setWizardStep(wizardStep + 1);
     } else {
       const finalSetup = { ...tripSetup, destination: localDestination };
-      await saveTripSetup(finalSetup);
-      navigate('/trip', { state: { tripSetup: finalSetup } });
+      setSaveError(null);
+      setIsSaving(true);
+      try {
+        const { tripId } = await saveTripSetup(finalSetup);
+        navigate('/trip', { state: { tripSetup: finalSetup, tripId } });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to save trip';
+        setSaveError(message);
+        console.error('Failed to save trip to server:', err);
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -68,9 +94,19 @@ export default function WizardPage() {
   };
 
   const canProceed = () => {
-    if (wizardStep === 1) return tripSetup.startDate && tripSetup.endDate && localDestination;
+    if (wizardStep === 1) {
+      if (!tripSetup.startDate || !tripSetup.endDate || !localDestination) return false;
+      // Start date must be on or before end date
+      return tripSetup.startDate.getTime() <= tripSetup.endDate.getTime();
+    }
     return true;
   };
+
+  const hasInvalidDateRange =
+    wizardStep === 1 &&
+    tripSetup.startDate &&
+    tripSetup.endDate &&
+    tripSetup.endDate.getTime() < tripSetup.startDate.getTime();
 
   const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
     const date = value ? new Date(value + 'T00:00:00') : null;
@@ -150,6 +186,11 @@ export default function WizardPage() {
                   />
                 </div>
               </div>
+              {hasInvalidDateRange && (
+                <p className="mt-3 px-5 text-sm text-destructive font-medium">
+                  End date must be on or after the start date.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -318,6 +359,16 @@ export default function WizardPage() {
                 🤖 Our AI will create a personalized itinerary based on your preferences, real-time data, and local recommendations.
               </p>
             </div>
+
+            {saveError && (
+              <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-4">
+                <p className="text-sm font-medium text-destructive">Could not save trip</p>
+                <p className="mt-1 text-sm text-muted-foreground">{saveError}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Check that the API is running (e.g. npm run dev in api/) and the database is set up (see database/README.md).
+                </p>
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -335,11 +386,15 @@ export default function WizardPage() {
           )}
           <button
             onClick={handleNext}
-            disabled={!canProceed()}
+            disabled={!canProceed() || isSaving}
             className="flex-1 inline-flex items-center justify-center gap-2 h-12 rounded-xl text-base font-bold bg-gradient-to-r from-accent to-accent-light text-accent-foreground shadow-lg hover:shadow-glow hover:-translate-y-1 hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none"
           >
             {wizardStep === 4 ? (
-              <><Check className="w-4 h-4" /> Generate Itinerary</>
+              isSaving ? (
+                <>Saving…</>
+              ) : (
+                <><Check className="w-4 h-4" /> Generate Itinerary</>
+              )
             ) : (
               <>Next <ArrowRight className="w-4 h-4" /></>
             )}

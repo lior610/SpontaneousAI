@@ -2,6 +2,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Sparkles, MapPin, Clock, Compass, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import heroMap from '@/assets/hero-map.png';
+import { getCurrentUser } from '@/services/authService';
 
 const features = [
   {
@@ -31,6 +32,14 @@ const benefits = [
 export function LandingPage() {
   const navigate = useNavigate();
 
+  const handleStartTrip = () => {
+    if (!getCurrentUser()) {
+      navigate('/login');
+      return;
+    }
+    navigate('/wizard');
+  };
+
   return (
     <div className="min-h-screen bg-background overflow-hidden">
       {/* Hero Section */}
@@ -55,7 +64,7 @@ export function LandingPage() {
             <Button variant="ghost" size="sm" asChild>
               <Link to="/login">Login</Link>
             </Button>
-            <Button variant="default" size="sm" onClick={() => navigate('/wizard')}>
+            <Button variant="default" size="sm" onClick={handleStartTrip}>
               Start Trip →
             </Button>
           </div>
@@ -84,7 +93,7 @@ export function LandingPage() {
               <Button 
                 variant="hero" 
                 size="xl"
-                onClick={() => navigate('/wizard')}
+                onClick={handleStartTrip}
                 className="w-full sm:w-auto"
               >
                 Start Your Trip
@@ -189,7 +198,7 @@ export function LandingPage() {
           <Button 
             variant="hero" 
             size="xl"
-            onClick={() => navigate('/wizard')}
+            onClick={handleStartTrip}
           >
             Start Planning Now
             <ArrowRight className="w-5 h-5 ml-2" />

@@ -1,16 +1,10 @@
 /**
  * Trip Service Layer
  * 
- * Placeholder async functions that return local data for now.
- * Replace each function body with real API calls when your MVC backend is ready.
- * 
- * Example future usage:
- *   export async function fetchTripSetup(tripId: string): Promise<TripSetup> {
- *     const res = await fetch(`/api/trips/${tripId}`);
- *     return res.json();
- *   }
+ * Calls API to update user preferences (users table) and create trips (trips table).
  */
 
+import { API_BASE } from '@/config';
 import {
   TripSetup,
   TripPreferences,
@@ -20,6 +14,61 @@ import {
   defaultTripSetup,
 } from '@/types/trip';
 
+/** Result of saving trip setup: trip is created in DB and user preferences are updated. */
+export interface SaveTripResult {
+  setup: TripSetup;
+  tripId: number;
+}
+
+function getCurrentUserId(): number {
+  const rawUser = window.localStorage.getItem('currentUser');
+  if (!rawUser) throw new Error('You must be logged in to save a trip');
+  try {
+    const parsed = JSON.parse(rawUser) as { id: number };
+    if (typeof parsed.id !== 'number') throw new Error('Invalid user session');
+    return parsed.id;
+  } catch {
+    throw new Error('Invalid user session. Please log in again.');
+  }
+}
+
+/** Map wizard preference sliders to users table columns (for PUT /api/users/:id). */
+function setupToUserPreferences(setup: TripSetup): {
+  travel_style?: 'budget' | 'balanced' | 'premium';
+  pace_preference?: 'slow' | 'normal' | 'fast';
+} {
+  const budgetPct = setup.preferences.budget;
+  const pacePct = setup.preferences.pace;
+  const travel_style: 'budget' | 'balanced' | 'premium' =
+    budgetPct < 40 ? 'budget' : budgetPct < 70 ? 'balanced' : 'premium';
+  const pace_preference: 'slow' | 'normal' | 'fast' =
+    pacePct < 40 ? 'slow' : pacePct < 70 ? 'normal' : 'fast';
+  return { travel_style, pace_preference };
+}
+
+/** Wizard categories with percentages for trip preference_breakdown (list of categories + %). */
+function preferenceBreakdownFromSetup(setup: TripSetup): Record<string, number> {
+  return { ...setup.preferences };
+}
+
+/** Update the current user's preferences in the users table (PUT /api/users/:id). Skips silently on 404 (user not in DB). */
+export async function updateUserPreferences(setup: TripSetup): Promise<void> {
+  const userId = getCurrentUserId();
+  const body = setupToUserPreferences(setup);
+  const res = await fetch(`${API_BASE}/api/users/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 404) {
+    return; // User not in DB (e.g. different DB or recreated table); continue to create trip
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Failed to update preferences (${res.status}): ${text || res.statusText}`);
+  }
+}
+
 // ─── Trip Setup ───────────────────────────────────────────────
 
 export async function fetchTripSetup(): Promise<TripSetup> {
@@ -27,9 +76,57 @@ export async function fetchTripSetup(): Promise<TripSetup> {
   return { ...defaultTripSetup };
 }
 
-export async function saveTripSetup(setup: TripSetup): Promise<TripSetup> {
-  // TODO: PUT /api/trips/:id
-  return setup;
+export async function saveTripSetup(setup: TripSetup): Promise<SaveTripResult> {
+  const userId = getCurrentUserId();
+  if (!setup.startDate || !setup.endDate || !setup.destination) {
+    throw new Error('startDate, endDate, and destination are required to save a trip');
+  }
+
+  // 1) Persist user preferences to users table (skipped if user not found, e.g. 404)
+  await updateUserPreferences(setup);
+
+  // 2) Create trip
+  const budget =
+    setup.preferences.budget != null
+      ? Math.round((setup.preferences.budget / 100) * 5000)
+      : null;
+
+  const tripBody = {
+    user_id: userId,
+    destination: setup.destination,
+    start_date: setup.startDate.toISOString().split('T')[0],
+    end_date: setup.endDate.toISOString().split('T')[0],
+    budget,
+    preference_breakdown: preferenceBreakdownFromSetup(setup),
+    max_walking_distance: setup.constraints.maxWalkingDistance,
+    preferred_transportation: setup.constraints.transportType,
+  };
+
+  const res = await fetch(`${API_BASE}/api/trips`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(tripBody),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => '');
+    if (res.status === 404 && errorText.includes('User not found')) {
+      throw new Error(
+        'Your account was not found in the database. Please log out and log in again, or register if you haven’t yet.',
+      );
+    }
+    throw new Error(
+      `Failed to save trip (status ${res.status}): ${errorText || res.statusText}`,
+    );
+  }
+
+  const data = await res.json();
+  const tripId = data.trip?.trip_id ?? data.trip_id;
+  if (typeof tripId !== 'number') {
+    throw new Error('Server did not return a trip id');
+  }
+
+  return { setup, tripId };
 }
 
 export async function updateTripPreferences(

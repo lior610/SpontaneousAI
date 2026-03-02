@@ -2,12 +2,16 @@ import pg from 'pg';
 
 const { Pool } = pg;
 
+// Homebrew Postgres on macOS uses your OS username, not "postgres"
+const defaultUser = process.env.POSTGRES_USER || process.env.USER || 'postgres';
+const defaultPassword = process.env.POSTGRES_PASSWORD !== undefined ? process.env.POSTGRES_PASSWORD : '';
+
 const pool = new Pool({
-  host: process.env.POSTGRES_HOST || 'db',
+  host: process.env.POSTGRES_HOST || 'localhost',
   port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
   database: process.env.POSTGRES_USERS_DB || 'users',
-  user: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || 'postgres',
+  user: defaultUser,
+  password: defaultPassword,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,

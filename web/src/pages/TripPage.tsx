@@ -1,17 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Settings, MapPin, RefreshCw } from 'lucide-react';
+import { Settings, MapPin, RefreshCw, LogOut } from 'lucide-react';
 import { ActivityCard } from '@/components/ActivityCard';
 import { FeedbackPopup } from '@/components/FeedbackPopup';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import { Activity, TripSetup, defaultTripSetup } from '@/types/trip';
 import { fetchNextActivity, completeActivity } from '@/services/tripService';
+import { clearCurrentUser } from '@/services/authService';
 
 export function TripPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const tripSetup: TripSetup = (location.state as any)?.tripSetup || defaultTripSetup;
+  const state = (location.state as { tripSetup?: TripSetup; tripId?: number }) ?? {};
+  const tripSetup: TripSetup = state.tripSetup ?? defaultTripSetup;
+  // state.tripId is the created trip id from the wizard (for future API calls e.g. next activity)
 
   const [currentActivity, setCurrentActivity] = useState<Activity | null>(null);
   const [completedActivities, setCompletedActivities] = useState<Activity[]>([]);
@@ -45,6 +48,11 @@ export function TripPage() {
     }
   };
 
+  const handleLogout = () => {
+    clearCurrentUser();
+    navigate('/', { replace: true });
+  };
+
   return (
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
@@ -64,8 +72,16 @@ export function TripPage() {
               <button
                 onClick={() => navigate('/wizard', { state: { tripSetup } })}
                 className="w-10 h-10 flex items-center justify-center rounded-lg text-foreground hover:bg-muted transition-all"
+                title="Trip settings"
               >
                 <Settings className="w-5 h-5" />
+              </button>
+              <button
+                onClick={handleLogout}
+                className="w-10 h-10 flex items-center justify-center rounded-lg text-foreground hover:bg-muted transition-all"
+                title="Log out"
+              >
+                <LogOut className="w-5 h-5" />
               </button>
             </div>
           </div>

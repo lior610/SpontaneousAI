@@ -6,8 +6,65 @@ import * as usersDb from '../db/usersConnection.js';
 
 export const getTrips = async (req, res) => {
   try {
-    // TODO: Get trips from database
-    res.json({ trips: [] });
+    const { user_id: queryUserId } = req.query;
+
+    let result;
+    if (queryUserId) {
+      const userId = parseInt(queryUserId, 10);
+      if (isNaN(userId) || userId <= 0) {
+        return res.status(400).json({ error: 'user_id query must be a positive integer' });
+      }
+      result = await usersDb.query(
+        `SELECT trip_id, user_id, destination, start_date, end_date, budget,
+           preference_breakdown, max_walking_distance, preferred_transportation,
+           desired_vibe, desired_indoor, max_travel_time_min,
+           avoid_category_1, avoid_category_2, avoid_category_3,
+           current_lat, current_lng, current_city, timezone,
+           local_hour_last_seen, day_of_week_last_seen,
+           created_at, updated_at
+         FROM trips WHERE user_id = $1 ORDER BY trip_id`,
+        [userId]
+      );
+    } else {
+      result = await usersDb.query(
+        `SELECT trip_id, user_id, destination, start_date, end_date, budget,
+           preference_breakdown, max_walking_distance, preferred_transportation,
+           desired_vibe, desired_indoor, max_travel_time_min,
+           avoid_category_1, avoid_category_2, avoid_category_3,
+           current_lat, current_lng, current_city, timezone,
+           local_hour_last_seen, day_of_week_last_seen,
+           created_at, updated_at
+         FROM trips ORDER BY trip_id`
+      );
+    }
+
+    const trips = result.rows.map((trip) => ({
+      trip_id: trip.trip_id,
+      user_id: trip.user_id,
+      destination: trip.destination,
+      start_date: trip.start_date,
+      end_date: trip.end_date,
+      budget: trip.budget ? parseFloat(trip.budget) : null,
+      preference_breakdown: trip.preference_breakdown,
+      max_walking_distance: trip.max_walking_distance != null ? parseFloat(trip.max_walking_distance) : null,
+      preferred_transportation: trip.preferred_transportation,
+      desired_vibe: trip.desired_vibe,
+      desired_indoor: trip.desired_indoor,
+      max_travel_time_min: trip.max_travel_time_min,
+      avoid_category_1: trip.avoid_category_1,
+      avoid_category_2: trip.avoid_category_2,
+      avoid_category_3: trip.avoid_category_3,
+      current_lat: trip.current_lat ? parseFloat(trip.current_lat) : null,
+      current_lng: trip.current_lng ? parseFloat(trip.current_lng) : null,
+      current_city: trip.current_city,
+      timezone: trip.timezone,
+      local_hour_last_seen: trip.local_hour_last_seen,
+      day_of_week_last_seen: trip.day_of_week_last_seen,
+      created_at: trip.created_at,
+      updated_at: trip.updated_at
+    }));
+
+    res.json({ trips });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -27,15 +84,21 @@ export const getTripById = async (req, res) => {
 
     // Query trip from database
     const result = await usersDb.query(
-      `SELECT trip_id, user_id, destination, start_date, end_date, budget, created_at, updated_at 
+      `SELECT trip_id, user_id, destination, start_date, end_date, budget,
+         preference_breakdown, max_walking_distance, preferred_transportation,
+         desired_vibe, desired_indoor, max_travel_time_min,
+         avoid_category_1, avoid_category_2, avoid_category_3,
+         current_lat, current_lng, current_city, timezone,
+         local_hour_last_seen, day_of_week_last_seen,
+         created_at, updated_at
        FROM trips 
        WHERE trip_id = $1`,
       [tripId]
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ 
-        error: 'Trip not found' 
+      return res.status(404).json({
+        error: 'Trip not found'
       });
     }
 
@@ -49,6 +112,21 @@ export const getTripById = async (req, res) => {
         start_date: trip.start_date,
         end_date: trip.end_date,
         budget: trip.budget ? parseFloat(trip.budget) : null,
+        preference_breakdown: trip.preference_breakdown,
+        max_walking_distance: trip.max_walking_distance != null ? parseFloat(trip.max_walking_distance) : null,
+        preferred_transportation: trip.preferred_transportation,
+        desired_vibe: trip.desired_vibe,
+        desired_indoor: trip.desired_indoor,
+        max_travel_time_min: trip.max_travel_time_min,
+        avoid_category_1: trip.avoid_category_1,
+        avoid_category_2: trip.avoid_category_2,
+        avoid_category_3: trip.avoid_category_3,
+        current_lat: trip.current_lat ? parseFloat(trip.current_lat) : null,
+        current_lng: trip.current_lng ? parseFloat(trip.current_lng) : null,
+        current_city: trip.current_city,
+        timezone: trip.timezone,
+        local_hour_last_seen: trip.local_hour_last_seen,
+        day_of_week_last_seen: trip.day_of_week_last_seen,
         created_at: trip.created_at,
         updated_at: trip.updated_at
       }
@@ -61,78 +139,106 @@ export const getTripById = async (req, res) => {
 
 export const createTrip = async (req, res) => {
   try {
-    const { user_id, destination, start_date, end_date, budget } = req.body;
+    const {
+      user_id,
+      destination,
+      start_date,
+      end_date,
+      budget,
+      preference_breakdown,
+      max_walking_distance,
+      preferred_transportation
+    } = req.body;
 
     // Validate required fields
     if (!user_id || !destination || !start_date || !end_date) {
-      return res.status(400).json({ 
-        error: 'user_id, destination, start_date, and end_date are required' 
+      return res.status(400).json({
+        error: 'user_id, destination, start_date, and end_date are required'
       });
     }
 
-    // Validate user_id is a number
     const userId = parseInt(user_id, 10);
     if (isNaN(userId) || userId <= 0) {
-      return res.status(400).json({ 
-        error: 'user_id must be a positive integer' 
+      return res.status(400).json({
+        error: 'user_id must be a positive integer'
       });
     }
 
-    // Check if user exists
     const userCheck = await usersDb.query(
       'SELECT id FROM users WHERE id = $1',
       [userId]
     );
-
     if (userCheck.rows.length === 0) {
-      return res.status(404).json({ 
-        error: 'User not found' 
-      });
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    // Parse dates
     const start = new Date(start_date);
     const end = new Date(end_date);
-
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      return res.status(400).json({ 
-        error: 'Invalid date format. Use YYYY-MM-DD or ISO 8601 format' 
+      return res.status(400).json({
+        error: 'Invalid date format. Use YYYY-MM-DD or ISO 8601 format'
       });
     }
-
-    // Validate date range
     if (end < start) {
-      return res.status(400).json({ 
-        error: 'end_date must be greater than or equal to start_date' 
+      return res.status(400).json({
+        error: 'end_date must be greater than or equal to start_date'
       });
     }
 
-    // Validate budget if provided
     let budgetValue = null;
     if (budget !== undefined && budget !== null) {
       budgetValue = parseFloat(budget);
       if (isNaN(budgetValue) || budgetValue < 0) {
-        return res.status(400).json({ 
-          error: 'budget must be a non-negative number' 
+        return res.status(400).json({
+          error: 'budget must be a non-negative number'
         });
       }
     }
 
-    // Format dates as YYYY-MM-DD for PostgreSQL
+    // preference_breakdown: object of category -> percentage, e.g. { food: 80, nature: 60, ... }
+    let preferenceBreakdownValue = null;
+    if (preference_breakdown != null && typeof preference_breakdown === 'object') {
+      preferenceBreakdownValue = JSON.stringify(preference_breakdown);
+    }
+
+    let maxWalkingDistanceValue = null;
+    if (max_walking_distance !== undefined && max_walking_distance !== null) {
+      const val = parseFloat(max_walking_distance);
+      if (isNaN(val) || val < 0) {
+        return res.status(400).json({ error: 'max_walking_distance must be a non-negative number (km)' });
+      }
+      maxWalkingDistanceValue = val;
+    }
+
+    const validTransport = ['walking', 'public', 'taxi'];
+    let preferredTransportationValue = null;
+    if (preferred_transportation !== undefined && preferred_transportation !== null && preferred_transportation !== '') {
+      if (!validTransport.includes(preferred_transportation)) {
+        return res.status(400).json({
+          error: `preferred_transportation must be one of: ${validTransport.join(', ')}`
+        });
+      }
+      preferredTransportationValue = preferred_transportation;
+    }
+
     const startDateStr = start.toISOString().split('T')[0];
     const endDateStr = end.toISOString().split('T')[0];
 
-    // Insert trip into database
     const result = await usersDb.query(
-      `INSERT INTO trips (user_id, destination, start_date, end_date, budget) 
-       VALUES ($1, $2, $3, $4, $5) 
-       RETURNING trip_id, user_id, destination, start_date, end_date, budget, created_at, updated_at`,
-      [userId, destination, startDateStr, endDateStr, budgetValue]
+      `INSERT INTO trips (
+        user_id, destination, start_date, end_date, budget, preference_breakdown,
+        max_walking_distance, preferred_transportation
+      )
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+       RETURNING trip_id, user_id, destination, start_date, end_date, budget, preference_breakdown,
+         max_walking_distance, preferred_transportation, created_at, updated_at`,
+      [userId, destination, startDateStr, endDateStr, budgetValue, preferenceBreakdownValue,
+        maxWalkingDistanceValue, preferredTransportationValue]
     );
 
     const newTrip = result.rows[0];
 
-    res.status(201).json({ 
+    res.status(201).json({
       message: 'Trip created successfully',
       trip: {
         trip_id: newTrip.trip_id,
@@ -141,6 +247,9 @@ export const createTrip = async (req, res) => {
         start_date: newTrip.start_date,
         end_date: newTrip.end_date,
         budget: newTrip.budget ? parseFloat(newTrip.budget) : null,
+        preference_breakdown: newTrip.preference_breakdown,
+        max_walking_distance: newTrip.max_walking_distance != null ? parseFloat(newTrip.max_walking_distance) : null,
+        preferred_transportation: newTrip.preferred_transportation,
         created_at: newTrip.created_at,
         updated_at: newTrip.updated_at
       }
@@ -169,7 +278,24 @@ export const createTrip = async (req, res) => {
 export const updateTrip = async (req, res) => {
   try {
     const { id } = req.params;
-    const { destination, start_date, end_date, budget } = req.body;
+    const { 
+      destination, 
+      start_date, 
+      end_date, 
+      budget,
+      desired_vibe,
+      desired_indoor,
+      max_travel_time_min,
+      avoid_category_1,
+      avoid_category_2,
+      avoid_category_3,
+      current_lat,
+      current_lng,
+      current_city,
+      timezone,
+      local_hour_last_seen,
+      day_of_week_last_seen
+    } = req.body;
 
     // Validate id is a number
     const tripId = parseInt(id, 10);
@@ -248,6 +374,145 @@ export const updateTrip = async (req, res) => {
       paramIndex++;
     }
 
+    // Handle desired_vibe
+    if (desired_vibe !== undefined) {
+      const validVibes = ['chill', 'social', 'adventure', 'romantic', 'quiet'];
+      if (desired_vibe !== null && !validVibes.includes(desired_vibe)) {
+        return res.status(400).json({ 
+          error: `desired_vibe must be one of: ${validVibes.join(', ')} or null` 
+        });
+      }
+      updates.push(`desired_vibe = $${paramIndex}`);
+      values.push(desired_vibe);
+      paramIndex++;
+    }
+
+    // Handle desired_indoor
+    if (desired_indoor !== undefined) {
+      updates.push(`desired_indoor = $${paramIndex}`);
+      values.push(desired_indoor !== null ? Boolean(desired_indoor) : null);
+      paramIndex++;
+    }
+
+    // Handle max_travel_time_min
+    if (max_travel_time_min !== undefined) {
+      if (max_travel_time_min !== null) {
+        const travelTime = parseInt(max_travel_time_min, 10);
+        if (isNaN(travelTime) || travelTime < 0) {
+          return res.status(400).json({ 
+            error: 'max_travel_time_min must be a non-negative integer or null' 
+          });
+        }
+        updates.push(`max_travel_time_min = $${paramIndex}`);
+        values.push(travelTime);
+      } else {
+        updates.push(`max_travel_time_min = $${paramIndex}`);
+        values.push(null);
+      }
+      paramIndex++;
+    }
+
+    // Handle avoid categories
+    if (avoid_category_1 !== undefined) {
+      updates.push(`avoid_category_1 = $${paramIndex}`);
+      values.push(avoid_category_1 || null);
+      paramIndex++;
+    }
+    if (avoid_category_2 !== undefined) {
+      updates.push(`avoid_category_2 = $${paramIndex}`);
+      values.push(avoid_category_2 || null);
+      paramIndex++;
+    }
+    if (avoid_category_3 !== undefined) {
+      updates.push(`avoid_category_3 = $${paramIndex}`);
+      values.push(avoid_category_3 || null);
+      paramIndex++;
+    }
+
+    // Handle coordinates
+    if (current_lat !== undefined) {
+      if (current_lat !== null) {
+        const lat = parseFloat(current_lat);
+        if (isNaN(lat) || lat < -90 || lat > 90) {
+          return res.status(400).json({ 
+            error: 'current_lat must be a number between -90 and 90 or null' 
+          });
+        }
+        updates.push(`current_lat = $${paramIndex}`);
+        values.push(lat);
+      } else {
+        updates.push(`current_lat = $${paramIndex}`);
+        values.push(null);
+      }
+      paramIndex++;
+    }
+    if (current_lng !== undefined) {
+      if (current_lng !== null) {
+        const lng = parseFloat(current_lng);
+        if (isNaN(lng) || lng < -180 || lng > 180) {
+          return res.status(400).json({ 
+            error: 'current_lng must be a number between -180 and 180 or null' 
+          });
+        }
+        updates.push(`current_lng = $${paramIndex}`);
+        values.push(lng);
+      } else {
+        updates.push(`current_lng = $${paramIndex}`);
+        values.push(null);
+      }
+      paramIndex++;
+    }
+
+    // Handle current_city
+    if (current_city !== undefined) {
+      updates.push(`current_city = $${paramIndex}`);
+      values.push(current_city || null);
+      paramIndex++;
+    }
+
+    // Handle timezone
+    if (timezone !== undefined) {
+      updates.push(`timezone = $${paramIndex}`);
+      values.push(timezone || null);
+      paramIndex++;
+    }
+
+    // Handle local_hour_last_seen
+    if (local_hour_last_seen !== undefined) {
+      if (local_hour_last_seen !== null) {
+        const hour = parseInt(local_hour_last_seen, 10);
+        if (isNaN(hour) || hour < 0 || hour > 23) {
+          return res.status(400).json({ 
+            error: 'local_hour_last_seen must be an integer between 0 and 23 or null' 
+          });
+        }
+        updates.push(`local_hour_last_seen = $${paramIndex}`);
+        values.push(hour);
+      } else {
+        updates.push(`local_hour_last_seen = $${paramIndex}`);
+        values.push(null);
+      }
+      paramIndex++;
+    }
+
+    // Handle day_of_week_last_seen
+    if (day_of_week_last_seen !== undefined) {
+      if (day_of_week_last_seen !== null) {
+        const day = parseInt(day_of_week_last_seen, 10);
+        if (isNaN(day) || day < 0 || day > 6) {
+          return res.status(400).json({ 
+            error: 'day_of_week_last_seen must be an integer between 0 and 6 or null' 
+          });
+        }
+        updates.push(`day_of_week_last_seen = $${paramIndex}`);
+        values.push(day);
+      } else {
+        updates.push(`day_of_week_last_seen = $${paramIndex}`);
+        values.push(null);
+      }
+      paramIndex++;
+    }
+
     // Check if any fields to update
     if (updates.length === 0) {
       return res.status(400).json({ 
@@ -296,7 +561,12 @@ export const updateTrip = async (req, res) => {
       UPDATE trips 
       SET ${updates.join(', ')} 
       WHERE trip_id = $${paramIndex}
-      RETURNING trip_id, user_id, destination, start_date, end_date, budget, created_at, updated_at
+      RETURNING trip_id, user_id, destination, start_date, end_date, budget,
+        desired_vibe, desired_indoor, max_travel_time_min,
+        avoid_category_1, avoid_category_2, avoid_category_3,
+        current_lat, current_lng, current_city, timezone,
+        local_hour_last_seen, day_of_week_last_seen,
+        created_at, updated_at
     `;
 
     const result = await usersDb.query(updateQuery, values);
@@ -312,6 +582,18 @@ export const updateTrip = async (req, res) => {
         start_date: updatedTrip.start_date,
         end_date: updatedTrip.end_date,
         budget: updatedTrip.budget ? parseFloat(updatedTrip.budget) : null,
+        desired_vibe: updatedTrip.desired_vibe,
+        desired_indoor: updatedTrip.desired_indoor,
+        max_travel_time_min: updatedTrip.max_travel_time_min,
+        avoid_category_1: updatedTrip.avoid_category_1,
+        avoid_category_2: updatedTrip.avoid_category_2,
+        avoid_category_3: updatedTrip.avoid_category_3,
+        current_lat: updatedTrip.current_lat ? parseFloat(updatedTrip.current_lat) : null,
+        current_lng: updatedTrip.current_lng ? parseFloat(updatedTrip.current_lng) : null,
+        current_city: updatedTrip.current_city,
+        timezone: updatedTrip.timezone,
+        local_hour_last_seen: updatedTrip.local_hour_last_seen,
+        day_of_week_last_seen: updatedTrip.day_of_week_last_seen,
         created_at: updatedTrip.created_at,
         updated_at: updatedTrip.updated_at
       }

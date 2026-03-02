@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, User, ArrowLeft } from "lucide-react";
+import { loginUser, registerUser, setCurrentUser } from "@/services/authService";
 
 export const LoginPage = () => {
   const [activeTab, setActiveTab] = useState<"login" | "register">("login");
@@ -10,15 +11,52 @@ export const LoginPage = () => {
   const [registerEmail, setRegisterEmail] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Login:", { loginEmail, loginPassword });
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const user = await loginUser(loginEmail, loginPassword);
+      setCurrentUser(user);
+      navigate("/wizard");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to login";
+      setError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Register:", { registerName, registerEmail, registerPassword });
+    setError(null);
+
+    if (registerPassword !== registerConfirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    const trimmedEmail = registerEmail.trim();
+    if (!trimmedEmail) {
+      setError("Email is required");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const user = await registerUser(registerName, trimmedEmail, registerPassword);
+      setCurrentUser(user);
+      navigate("/wizard");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to register";
+      setError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -79,16 +117,21 @@ export const LoginPage = () => {
             {/* Login Form */}
             {activeTab === "login" && (
               <form onSubmit={handleLogin} className="space-y-4">
+                {error && (
+                  <p className="text-sm text-red-500" role="alert">
+                    {error}
+                  </p>
+                )}
                 <div className="space-y-2">
                   <label htmlFor="login-email" className="text-sm font-medium text-foreground">
-                    Email
+                    Username
                   </label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <input
                       id="login-email"
-                      type="email"
-                      placeholder="you@example.com"
+                      type="text"
+                      placeholder="Your username"
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
                       className="w-full h-10 pl-10 pr-3 rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
@@ -118,9 +161,10 @@ export const LoginPage = () => {
                 </div>
                 <button
                   type="submit"
-                  className="w-full h-11 bg-primary text-primary-foreground font-medium rounded-md hover:bg-primary/90 transition-colors"
+                  disabled={isSubmitting}
+                  className="w-full h-11 bg-primary text-primary-foreground font-medium rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
-                  Sign In
+                  {isSubmitting ? "Signing In..." : "Sign In"}
                 </button>
               </form>
             )}
@@ -128,16 +172,21 @@ export const LoginPage = () => {
             {/* Register Form */}
             {activeTab === "register" && (
               <form onSubmit={handleRegister} className="space-y-4">
+                {error && (
+                  <p className="text-sm text-red-500" role="alert">
+                    {error}
+                  </p>
+                )}
                 <div className="space-y-2">
                   <label htmlFor="register-name" className="text-sm font-medium text-foreground">
-                    Full Name
+                    Username
                   </label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <input
                       id="register-name"
                       type="text"
-                      placeholder="John Doe"
+                      placeholder="3-30 characters, letters, numbers, underscores only"
                       value={registerName}
                       onChange={(e) => setRegisterName(e.target.value)}
                       className="w-full h-10 pl-10 pr-3 rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
@@ -146,13 +195,14 @@ export const LoginPage = () => {
                 </div>
                 <div className="space-y-2">
                   <label htmlFor="register-email" className="text-sm font-medium text-foreground">
-                    Email
+                    Email <span className="text-muted-foreground">(required)</span>
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <input
                       id="register-email"
                       type="email"
+                      required
                       placeholder="you@example.com"
                       value={registerEmail}
                       onChange={(e) => setRegisterEmail(e.target.value)}
@@ -194,9 +244,10 @@ export const LoginPage = () => {
                 </div>
                 <button
                   type="submit"
-                  className="w-full h-11 bg-primary text-primary-foreground font-medium rounded-md hover:bg-primary/90 transition-colors"
+                  disabled={isSubmitting}
+                  className="w-full h-11 bg-primary text-primary-foreground font-medium rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
-                  Create Account
+                  {isSubmitting ? "Creating Account..." : "Create Account"}
                 </button>
               </form>
             )}
