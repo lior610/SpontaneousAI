@@ -2,15 +2,12 @@ import pg from 'pg';
 
 const { Pool } = pg;
 
-const defaultUser = process.env.POSTGRES_USER || process.env.USER || 'postgres';
-const defaultPassword = process.env.POSTGRES_PASSWORD !== undefined ? process.env.POSTGRES_PASSWORD : '';
-
 const pool = new Pool({
-  host: process.env.POSTGRES_HOST || 'localhost',
+  host: process.env.POSTGRES_HOST || 'db', // Docker service name
   port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
   database: process.env.POSTGRES_DB || 'postgres',
-  user: defaultUser,
-  password: defaultPassword,
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'postgres',
   max: 20, // Maximum number of clients in the pool
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
@@ -41,4 +38,3 @@ export { pool };
 
 // Default export
 export default pool;
-

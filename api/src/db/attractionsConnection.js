@@ -3,15 +3,12 @@ import pg from 'pg';
 const { Pool } = pg;
 
 
-const defaultUser = process.env.POSTGRES_USER || process.env.USER || 'postgres';
-const defaultPassword = process.env.POSTGRES_PASSWORD !== undefined ? process.env.POSTGRES_PASSWORD : '';
-
 const pool = new Pool({
-  host: process.env.POSTGRES_HOST || 'localhost',
+  host: process.env.POSTGRES_HOST || 'db',
   port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
   database: process.env.POSTGRES_ATTRACTIONS_DB || 'attractions',
-  user: defaultUser,
-  password: defaultPassword,
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'postgres',
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
@@ -32,4 +29,3 @@ export async function closePool() {
 
 export { pool };
 export default pool;
-
