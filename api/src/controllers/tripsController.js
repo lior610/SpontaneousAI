@@ -615,8 +615,24 @@ export const updateTrip = async (req, res) => {
 export const deleteTrip = async (req, res) => {
   try {
     const { id } = req.params;
-    // TODO: Delete trip from database
-    res.json({ message: 'Trip deleted', id });
+
+    const tripId = parseInt(id, 10);
+    if (isNaN(tripId) || tripId <= 0) {
+      return res.status(400).json({
+        error: 'Invalid trip ID. Must be a positive integer'
+      });
+    }
+
+    const result = await usersDb.query(
+      'DELETE FROM trips WHERE trip_id = $1 RETURNING trip_id',
+      [tripId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Trip not found' });
+    }
+
+    res.json({ message: 'Trip deleted', id: tripId });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
