@@ -6,11 +6,13 @@ import sys
 import random
 import dotenv
 import logging
+from pathlib import Path
 from collections import Counter
 from google.api_core.exceptions import TooManyRequests
 
 # Load environment variables
-dotenv.load_dotenv()
+BASE_DIR = Path(__file__).resolve().parents[1]
+dotenv.load_dotenv(BASE_DIR / ".env")
 
 # --- Configuration ---
 BATCH_SIZE_ATTRACTIONS = int(os.getenv("BATCH_SIZE_ATTRACTIONS", 20))    
@@ -20,10 +22,13 @@ THRESHOLD_SMALL_CHAIN  = int(os.getenv("THRESHOLD_SMALL_CHAIN", 2))        # 2 t
 WAIT_SECONDS           = int(os.getenv("WAIT_SECONDS", 2))                 # Wait between requests
 
 # --- File Paths ---
-CHAIN_CACHE_FILE       = os.getenv("CHAIN_CACHE_FILE", "chain_cache.json")
-ATTRACTION_CACHE_FILE  = os.getenv("ATTRACTION_CACHE_FILE", "attraction_cache.json")
-INPUT_FILE             = os.getenv("PLACES_JSON", "places_with_results.json")
-OUTPUT_FILE            = os.getenv("OUTPUT_JSON", "places_enriched_final.json")
+CITY                   = os.getenv("CITY", "london").strip().lower()
+DATA_DIR               = BASE_DIR / "data" / CITY
+CACHE_DIR              = BASE_DIR / "cache" / CITY
+CHAIN_CACHE_FILE       = os.getenv("CHAIN_CACHE_FILE", str(CACHE_DIR / "chain_cache.json"))
+ATTRACTION_CACHE_FILE  = os.getenv("ATTRACTION_CACHE_FILE", str(CACHE_DIR / "attraction_cache.json"))
+INPUT_FILE             = os.getenv("PLACES_JSON", str(DATA_DIR / "filtered_places.json"))
+OUTPUT_FILE            = os.getenv("OUTPUT_JSON", str(DATA_DIR / "places_enriched.json"))
 
 # --- Gemini Configuration ---
 generation_config = {
@@ -38,7 +43,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('enrichment_process.log', encoding='utf-8'),
+        logging.FileHandler(BASE_DIR / 'enrichment_process.log', encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -84,6 +89,7 @@ def load_cache(cache_file):
 
 def save_cache(cache_data, cache_file):
     try:
+        Path(cache_file).parent.mkdir(parents=True, exist_ok=True)
         with open(cache_file, 'w', encoding='utf-8') as f:
             json.dump(cache_data, f, indent=2, ensure_ascii=False)
     except Exception as e:
@@ -262,6 +268,16 @@ def process_chains_step(all_places):
     return chain_cache
 
 def main():
+    logger.info(f"City: {CITY}")
+    logger.info(f"Input file: {INPUT_FILE}")
+    logger.info(f"Output file: {OUTPUT_FILE}")
+    logger.info(f"Chain cache file: {CHAIN_CACHE_FILE}")
+    logger.info(f"Attraction cache file: {ATTRACTION_CACHE_FILE}")
+
+    if not os.path.exists(INPUT_FILE):
+        logger.error(f"Input file not found: {INPUT_FILE}")
+        sys.exit(1)
+
     with open(INPUT_FILE, 'r', encoding='utf-8') as f:
         all_places = json.load(f)
 
@@ -363,6 +379,7 @@ def main():
             logger.error(f"Error processing attraction batch: {e}")
             
     # Save final enriched data
+    Path(OUTPUT_FILE).parent.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
         json.dump(final_data, f, indent=2, ensure_ascii=False)
     logger.info("Done.")
