@@ -5,7 +5,7 @@ const { Pool } = pg;
 const pool = new Pool({
   host: process.env.POSTGRES_HOST || 'db',
   port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
-  database: process.env.POSTGRES_USERS_DB || 'spontaneous_ai_users',
+  database: process.env.POSTGRES_USERS_DB || 'users',
   user: process.env.POSTGRES_USER || 'postgres',
   password: process.env.POSTGRES_PASSWORD || 'postgres',
   max: 20,
@@ -36,4 +36,3 @@ export async function closePool() {
 
 export { pool };
 export default pool;
-

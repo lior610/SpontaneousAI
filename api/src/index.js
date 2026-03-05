@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import axios from 'axios';
 import cors from 'cors';
@@ -10,6 +11,19 @@ app.use(express.json());
 
 // Mount API routes
 app.use('/api', routes);
+
+// Root route so GET / returns something useful
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Spontaneous AI API',
+    docs: {
+      health: 'GET /health',
+      status: 'GET /status',
+      users: 'GET /api/users, GET /api/users/:id, POST /api/users, POST /api/users/login, PUT /api/users/:id',
+      trips: 'GET /api/trips, GET /api/trips/:id, POST /api/trips, PUT /api/trips/:id, DELETE /api/trips/:id',
+    },
+  });
+});
 
 const ENGINE_URL = `http://${process.env.ENGINE_HOST || 'engine'}:${process.env.ENGINE_PORT || '8000'}`;
 
