@@ -31,7 +31,6 @@ class UserPreferencesBase(BaseModel):
     max_walking_distance_km: Optional[float] = None
     transportation_mode: TransportationMode = TransportationMode.MIXED
     dietary_restrictions: List[str] = []
-    accessibility_needs: List[str] = []
 
 class UserPreferencesCreate(UserPreferencesBase):
     """Schema for creating user preferences"""
@@ -44,7 +43,6 @@ class UserPreferencesUpdate(BaseModel):
     max_walking_distance_km: Optional[float] = None
     transportation_mode: Optional[TransportationMode] = None
     dietary_restrictions: Optional[List[str]] = None
-    accessibility_needs: Optional[List[str]] = None
 
 class UserPreferencesResponse(UserPreferencesBase):
     """Schema for user preferences response"""
