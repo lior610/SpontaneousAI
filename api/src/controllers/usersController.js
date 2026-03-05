@@ -145,14 +145,8 @@ export const updateUser = async (req, res) => {
       age_group,
       travel_style,
       pace_preference,
-      crowd_tolerance,
-      activity_intensity_preference,
-      night_owl,
       preferred_start_hour,
       dietary_style,
-      accessibility_needs,
-      with_kids,
-      tiredness_level,
       hunger_level,
       energy_level
     } = req.body;
@@ -225,36 +219,6 @@ export const updateUser = async (req, res) => {
       paramIndex++;
     }
 
-    if (crowd_tolerance !== undefined) {
-      const validCrowdTolerances = ['low', 'medium', 'high'];
-      if (crowd_tolerance !== null && !validCrowdTolerances.includes(crowd_tolerance)) {
-        return res.status(400).json({ 
-          error: `crowd_tolerance must be one of: ${validCrowdTolerances.join(', ')} or null` 
-        });
-      }
-      updates.push(`crowd_tolerance = $${paramIndex}`);
-      values.push(crowd_tolerance);
-      paramIndex++;
-    }
-
-    if (activity_intensity_preference !== undefined) {
-      const validActivityIntensities = ['low', 'medium', 'high'];
-      if (activity_intensity_preference !== null && !validActivityIntensities.includes(activity_intensity_preference)) {
-        return res.status(400).json({ 
-          error: `activity_intensity_preference must be one of: ${validActivityIntensities.join(', ')} or null` 
-        });
-      }
-      updates.push(`activity_intensity_preference = $${paramIndex}`);
-      values.push(activity_intensity_preference);
-      paramIndex++;
-    }
-
-    if (night_owl !== undefined) {
-      updates.push(`night_owl = $${paramIndex}`);
-      values.push(night_owl !== null ? Boolean(night_owl) : null);
-      paramIndex++;
-    }
-
     if (preferred_start_hour !== undefined) {
       if (preferred_start_hour !== null) {
         const hour = parseInt(preferred_start_hour, 10);
@@ -281,35 +245,6 @@ export const updateUser = async (req, res) => {
       }
       updates.push(`dietary_style = $${paramIndex}`);
       values.push(dietary_style);
-      paramIndex++;
-    }
-
-    if (accessibility_needs !== undefined) {
-      updates.push(`accessibility_needs = $${paramIndex}`);
-      values.push(accessibility_needs !== null ? Boolean(accessibility_needs) : null);
-      paramIndex++;
-    }
-
-    if (with_kids !== undefined) {
-      updates.push(`with_kids = $${paramIndex}`);
-      values.push(with_kids !== null ? Boolean(with_kids) : null);
-      paramIndex++;
-    }
-
-    if (tiredness_level !== undefined) {
-      if (tiredness_level !== null) {
-        const level = parseFloat(tiredness_level);
-        if (isNaN(level) || level < 0 || level > 5) {
-          return res.status(400).json({ 
-            error: 'tiredness_level must be a number between 0 and 5 or null' 
-          });
-        }
-        updates.push(`tiredness_level = $${paramIndex}`);
-        values.push(level);
-      } else {
-        updates.push(`tiredness_level = $${paramIndex}`);
-        values.push(null);
-      }
       paramIndex++;
     }
 

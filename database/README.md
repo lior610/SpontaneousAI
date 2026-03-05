@@ -47,6 +47,15 @@ psql -d users -f database/migrations/001_add_preference_breakdown.sql
 
 # Wizard constraints: max walking distance (km) and preferred transport
 psql -d users -f database/migrations/002_add_max_walking_distance_and_preferred_transportation.sql
+
+# Remove legacy fields (current_city, desired_vibe, desired_indoor, avoid_category_1/2/3)
+psql -d users -f database/migrations/003_remove_legacy_trip_fields.sql
+
+# Move with_kids from users to trips
+psql -d users -f database/migrations/004_move_with_kids_to_trips.sql
+
+# Remove user preference fields (night_owl, activity_intensity_preference, crowd_tolerance, tiredness_level, accessibility_needs)
+psql -d users -f database/migrations/005_remove_user_preference_fields.sql
 ```
 
 ## API configuration

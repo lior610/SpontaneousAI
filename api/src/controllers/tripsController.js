@@ -17,9 +17,8 @@ export const getTrips = async (req, res) => {
       result = await usersDb.query(
         `SELECT trip_id, user_id, destination, start_date, end_date, budget,
            preference_breakdown, max_walking_distance, preferred_transportation,
-           desired_vibe, desired_indoor, max_travel_time_min,
-           avoid_category_1, avoid_category_2, avoid_category_3,
-           current_lat, current_lng, current_city, timezone,
+           max_travel_time_min, with_kids,
+           current_lat, current_lng, timezone,
            local_hour_last_seen, day_of_week_last_seen,
            created_at, updated_at
          FROM trips WHERE user_id = $1 ORDER BY trip_id`,
@@ -29,9 +28,8 @@ export const getTrips = async (req, res) => {
       result = await usersDb.query(
         `SELECT trip_id, user_id, destination, start_date, end_date, budget,
            preference_breakdown, max_walking_distance, preferred_transportation,
-           desired_vibe, desired_indoor, max_travel_time_min,
-           avoid_category_1, avoid_category_2, avoid_category_3,
-           current_lat, current_lng, current_city, timezone,
+           max_travel_time_min, with_kids,
+           current_lat, current_lng, timezone,
            local_hour_last_seen, day_of_week_last_seen,
            created_at, updated_at
          FROM trips ORDER BY trip_id`
@@ -48,15 +46,10 @@ export const getTrips = async (req, res) => {
       preference_breakdown: trip.preference_breakdown,
       max_walking_distance: trip.max_walking_distance != null ? parseFloat(trip.max_walking_distance) : null,
       preferred_transportation: trip.preferred_transportation,
-      desired_vibe: trip.desired_vibe,
-      desired_indoor: trip.desired_indoor,
       max_travel_time_min: trip.max_travel_time_min,
-      avoid_category_1: trip.avoid_category_1,
-      avoid_category_2: trip.avoid_category_2,
-      avoid_category_3: trip.avoid_category_3,
+      with_kids: trip.with_kids,
       current_lat: trip.current_lat ? parseFloat(trip.current_lat) : null,
       current_lng: trip.current_lng ? parseFloat(trip.current_lng) : null,
-      current_city: trip.current_city,
       timezone: trip.timezone,
       local_hour_last_seen: trip.local_hour_last_seen,
       day_of_week_last_seen: trip.day_of_week_last_seen,
@@ -86,9 +79,8 @@ export const getTripById = async (req, res) => {
     const result = await usersDb.query(
       `SELECT trip_id, user_id, destination, start_date, end_date, budget,
          preference_breakdown, max_walking_distance, preferred_transportation,
-         desired_vibe, desired_indoor, max_travel_time_min,
-         avoid_category_1, avoid_category_2, avoid_category_3,
-         current_lat, current_lng, current_city, timezone,
+         max_travel_time_min, with_kids,
+         current_lat, current_lng, timezone,
          local_hour_last_seen, day_of_week_last_seen,
          created_at, updated_at
        FROM trips 
@@ -115,15 +107,10 @@ export const getTripById = async (req, res) => {
         preference_breakdown: trip.preference_breakdown,
         max_walking_distance: trip.max_walking_distance != null ? parseFloat(trip.max_walking_distance) : null,
         preferred_transportation: trip.preferred_transportation,
-        desired_vibe: trip.desired_vibe,
-        desired_indoor: trip.desired_indoor,
         max_travel_time_min: trip.max_travel_time_min,
-        avoid_category_1: trip.avoid_category_1,
-        avoid_category_2: trip.avoid_category_2,
-        avoid_category_3: trip.avoid_category_3,
+        with_kids: trip.with_kids,
         current_lat: trip.current_lat ? parseFloat(trip.current_lat) : null,
         current_lng: trip.current_lng ? parseFloat(trip.current_lng) : null,
-        current_city: trip.current_city,
         timezone: trip.timezone,
         local_hour_last_seen: trip.local_hour_last_seen,
         day_of_week_last_seen: trip.day_of_week_last_seen,
@@ -147,7 +134,8 @@ export const createTrip = async (req, res) => {
       budget,
       preference_breakdown,
       max_walking_distance,
-      preferred_transportation
+      preferred_transportation,
+      with_kids
     } = req.body;
 
     // Validate required fields
@@ -221,19 +209,21 @@ export const createTrip = async (req, res) => {
       preferredTransportationValue = preferred_transportation;
     }
 
+    const withKidsValue = with_kids !== undefined ? (with_kids !== null ? Boolean(with_kids) : null) : null;
+
     const startDateStr = start.toISOString().split('T')[0];
     const endDateStr = end.toISOString().split('T')[0];
 
     const result = await usersDb.query(
       `INSERT INTO trips (
         user_id, destination, start_date, end_date, budget, preference_breakdown,
-        max_walking_distance, preferred_transportation
+        max_walking_distance, preferred_transportation, with_kids
       )
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)
        RETURNING trip_id, user_id, destination, start_date, end_date, budget, preference_breakdown,
-         max_walking_distance, preferred_transportation, created_at, updated_at`,
+         max_walking_distance, preferred_transportation, with_kids, created_at, updated_at`,
       [userId, destination, startDateStr, endDateStr, budgetValue, preferenceBreakdownValue,
-        maxWalkingDistanceValue, preferredTransportationValue]
+        maxWalkingDistanceValue, preferredTransportationValue, withKidsValue]
     );
 
     const newTrip = result.rows[0];
@@ -250,6 +240,7 @@ export const createTrip = async (req, res) => {
         preference_breakdown: newTrip.preference_breakdown,
         max_walking_distance: newTrip.max_walking_distance != null ? parseFloat(newTrip.max_walking_distance) : null,
         preferred_transportation: newTrip.preferred_transportation,
+        with_kids: newTrip.with_kids,
         created_at: newTrip.created_at,
         updated_at: newTrip.updated_at
       }
@@ -283,15 +274,10 @@ export const updateTrip = async (req, res) => {
       start_date, 
       end_date, 
       budget,
-      desired_vibe,
-      desired_indoor,
       max_travel_time_min,
-      avoid_category_1,
-      avoid_category_2,
-      avoid_category_3,
+      with_kids,
       current_lat,
       current_lng,
-      current_city,
       timezone,
       local_hour_last_seen,
       day_of_week_last_seen
@@ -374,26 +360,6 @@ export const updateTrip = async (req, res) => {
       paramIndex++;
     }
 
-    // Handle desired_vibe
-    if (desired_vibe !== undefined) {
-      const validVibes = ['chill', 'social', 'adventure', 'romantic', 'quiet'];
-      if (desired_vibe !== null && !validVibes.includes(desired_vibe)) {
-        return res.status(400).json({ 
-          error: `desired_vibe must be one of: ${validVibes.join(', ')} or null` 
-        });
-      }
-      updates.push(`desired_vibe = $${paramIndex}`);
-      values.push(desired_vibe);
-      paramIndex++;
-    }
-
-    // Handle desired_indoor
-    if (desired_indoor !== undefined) {
-      updates.push(`desired_indoor = $${paramIndex}`);
-      values.push(desired_indoor !== null ? Boolean(desired_indoor) : null);
-      paramIndex++;
-    }
-
     // Handle max_travel_time_min
     if (max_travel_time_min !== undefined) {
       if (max_travel_time_min !== null) {
@@ -412,20 +378,9 @@ export const updateTrip = async (req, res) => {
       paramIndex++;
     }
 
-    // Handle avoid categories
-    if (avoid_category_1 !== undefined) {
-      updates.push(`avoid_category_1 = $${paramIndex}`);
-      values.push(avoid_category_1 || null);
-      paramIndex++;
-    }
-    if (avoid_category_2 !== undefined) {
-      updates.push(`avoid_category_2 = $${paramIndex}`);
-      values.push(avoid_category_2 || null);
-      paramIndex++;
-    }
-    if (avoid_category_3 !== undefined) {
-      updates.push(`avoid_category_3 = $${paramIndex}`);
-      values.push(avoid_category_3 || null);
+    if (with_kids !== undefined) {
+      updates.push(`with_kids = $${paramIndex}`);
+      values.push(with_kids !== null ? Boolean(with_kids) : null);
       paramIndex++;
     }
 
@@ -460,13 +415,6 @@ export const updateTrip = async (req, res) => {
         updates.push(`current_lng = $${paramIndex}`);
         values.push(null);
       }
-      paramIndex++;
-    }
-
-    // Handle current_city
-    if (current_city !== undefined) {
-      updates.push(`current_city = $${paramIndex}`);
-      values.push(current_city || null);
       paramIndex++;
     }
 
@@ -562,9 +510,8 @@ export const updateTrip = async (req, res) => {
       SET ${updates.join(', ')} 
       WHERE trip_id = $${paramIndex}
       RETURNING trip_id, user_id, destination, start_date, end_date, budget,
-        desired_vibe, desired_indoor, max_travel_time_min,
-        avoid_category_1, avoid_category_2, avoid_category_3,
-        current_lat, current_lng, current_city, timezone,
+        max_travel_time_min, with_kids,
+        current_lat, current_lng, timezone,
         local_hour_last_seen, day_of_week_last_seen,
         created_at, updated_at
     `;
@@ -582,15 +529,10 @@ export const updateTrip = async (req, res) => {
         start_date: updatedTrip.start_date,
         end_date: updatedTrip.end_date,
         budget: updatedTrip.budget ? parseFloat(updatedTrip.budget) : null,
-        desired_vibe: updatedTrip.desired_vibe,
-        desired_indoor: updatedTrip.desired_indoor,
         max_travel_time_min: updatedTrip.max_travel_time_min,
-        avoid_category_1: updatedTrip.avoid_category_1,
-        avoid_category_2: updatedTrip.avoid_category_2,
-        avoid_category_3: updatedTrip.avoid_category_3,
+        with_kids: updatedTrip.with_kids,
         current_lat: updatedTrip.current_lat ? parseFloat(updatedTrip.current_lat) : null,
         current_lng: updatedTrip.current_lng ? parseFloat(updatedTrip.current_lng) : null,
-        current_city: updatedTrip.current_city,
         timezone: updatedTrip.timezone,
         local_hour_last_seen: updatedTrip.local_hour_last_seen,
         day_of_week_last_seen: updatedTrip.day_of_week_last_seen,
