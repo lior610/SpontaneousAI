@@ -64,8 +64,8 @@ async def create_attraction(attraction_data: dict) -> dict:
     Note:
         Database storage is not yet implemented - this is a stub
     """
-    # Build text for embedding from relevant fields
-    attraction_text = f"{attraction_data.get('name', '')} {attraction_data.get('description', '')}"
+    # Build text for embedding from relevant fields (description; get-vibe outputs embedding_desc, mapped on load)
+    attraction_text = attraction_data.get('description') or attraction_data.get('name', '')
     
     # Generate embedding for semantic search
     embedding = await generate_embedding(attraction_text)
