@@ -1,13 +1,21 @@
 import json
 import logging
+import os
 from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+
+CITY = os.getenv("CITY", "london").strip().lower()
+DATA_DIR = BASE_DIR / "data" / CITY
+INPUT_FILE = os.getenv("FILTER_INPUT_FILE", str(DATA_DIR / f"foursquare_{CITY}_attractions.json"))
+OUTPUT_FILE = os.getenv("FILTER_OUTPUT_FILE", str(DATA_DIR / "filtered_places.json"))
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('filter_places.log'),
+        logging.FileHandler(BASE_DIR / 'filter_places.log'),
         logging.StreamHandler()
     ]
 )
@@ -187,11 +195,13 @@ def identify_non_unique_names(places):
     return sorted(non_unique)
 
 def main():
-    input_file = 'foursquare_ny_attractions.json'
-    output_file = 'filtered_places.json'
-    chains_file = 'chains_place_names.json'
+    input_file = INPUT_FILE
+    output_file = OUTPUT_FILE
     
     logger.info("Starting filter process...")
+    logger.info(f"City: {CITY}")
+    logger.info(f"Input file: {input_file}")
+    logger.info(f"Output file: {output_file}")
     
     try:
         # Check if input file exists
@@ -215,6 +225,7 @@ def main():
         
         # Save output
         try:
+            Path(output_file).parent.mkdir(parents=True, exist_ok=True)
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(filtered_places, f, ensure_ascii=False, indent=2)
             logger.info(f"Successfully saved {len(filtered_places)} filtered places to {output_file}")

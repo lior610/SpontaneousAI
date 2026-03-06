@@ -29,4 +29,3 @@ export async function closePool() {
 
 export { pool };
 export default pool;
-
