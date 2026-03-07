@@ -16,7 +16,7 @@ def get_db_config():
     return {
         'host': os.getenv('POSTGRES_HOST', 'db'),
         'port': int(os.getenv('POSTGRES_PORT', '5432')),
-        'database': os.getenv('POSTGRES_USERS_DB', 'users'),
+        'database': os.getenv('POSTGRES_USERS_DB', 'client_info'),
         'user': os.getenv('POSTGRES_USER', 'postgres'),
         'password': os.getenv('POSTGRES_PASSWORD', 'postgres'),
     }

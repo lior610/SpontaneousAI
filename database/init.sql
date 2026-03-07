@@ -59,11 +59,11 @@ CREATE INDEX IF NOT EXISTS idx_attractions_location_id ON attractions(location_i
 CREATE INDEX IF NOT EXISTS idx_attractions_location_cluster ON attractions(location_cluster_id);
 CREATE INDEX IF NOT EXISTS idx_attractions_location_cluster_composite ON attractions(location_id, location_cluster_id);
 
--- Create the users database (for users, trips, preferences)
-CREATE DATABASE users;
+-- Create the client_info database (for users, trips, preferences)
+CREATE DATABASE client_info;
 
--- Connect to users database and create users table
-\c users
+-- Connect to client_info database and create users table
+\c client_info
 
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
