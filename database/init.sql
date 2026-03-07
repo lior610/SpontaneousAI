@@ -32,11 +32,11 @@ CREATE TABLE IF NOT EXISTS attractions (
 
 CREATE INDEX IF NOT EXISTS idx_attractions_cluster_id ON attractions (cluster_id);
 
--- Create the users database (for users, trips, preferences)
-CREATE DATABASE users;
+-- Create the client_info database (for users, trips, preferences)
+CREATE DATABASE client_info;
 
--- Connect to users database and create users table
-\c users
+-- Connect to client_info database and create users table
+\c client_info
 
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
