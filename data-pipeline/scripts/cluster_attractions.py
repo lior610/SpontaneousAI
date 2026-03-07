@@ -1,34 +1,33 @@
 #!/usr/bin/env python3
 """
-Cluster attractions using UMAP + HDBSCAN.
+Cluster attractions using UMAP + HDBSCAN. Per-location clustering.
 
-Loads embeddings from the database, reduces dimensionality with UMAP,
-clusters with HDBSCAN, and writes cluster_id back to the database.
+Loads embeddings per location_id, reduces dimensionality with UMAP,
+clusters with HDBSCAN, creates location_clusters rows, and writes
+location_cluster_id to attractions.
 
 Run load_places_to_db.py first to populate embeddings.
 
 Usage:
     python data-pipeline/scripts/cluster_attractions.py
+    LOCATION_SLUG=london python data-pipeline/scripts/cluster_attractions.py  # one location only
 
 Env vars:
+    LOCATION_SLUG     - If set, cluster only this location. Else cluster all locations.
     UMAP_N_COMPONENTS - UMAP output dimensions (default: 15)
-    UMAP_N_NEIGHBORS  - UMAP local vs global balance (default: 15)
-    MIN_CLUSTER_SIZE  - HDBSCAN min cluster size (default: 5)
-    MIN_SAMPLES       - HDBSCAN min samples for core points (default: same as MIN_CLUSTER_SIZE; lower = less noise)
-    CLUSTER_SELECTION - HDBSCAN method: "eom" or "leaf" (default: eom; leaf = fewer clusters)
-    ASSIGN_NOISE       - If 1, assign noise points to nearest cluster (default: 0)
-    POSTGRES_HOST     - DB host (default: localhost)
-    POSTGRES_PORT     - DB port (default: 5432)
-    POSTGRES_ATTRACTIONS_DB - Database name (default: attractions)
-    POSTGRES_USER     - DB user
-    POSTGRES_PASSWORD - DB password
+    UMAP_N_NEIGHBORS  - UMAP local vs global balance (default: 30)
+    MIN_CLUSTER_SIZE  - HDBSCAN min cluster size (default: 100)
+    MIN_SAMPLES       - HDBSCAN min samples (default: same as MIN_CLUSTER_SIZE)
+    CLUSTER_SELECTION - HDBSCAN method: "eom" or "leaf" (default: eom)
+    ASSIGN_NOISE      - If 1, assign noise to nearest cluster (default: 1)
+    POSTGRES_*        - DB connection
 """
 import json
 import os
 import sys
 import logging
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Any
 
 # Add shared/python to path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -54,28 +53,50 @@ def get_db_config() -> dict:
     }
 
 
-def load_attractions(config: dict) -> Tuple[List[str], np.ndarray]:
-    """Load place_ids and embeddings from database."""
+def get_location_ids(config: dict, location_slug: Optional[str] = None) -> List[Tuple[int, str]]:
+    """Return list of (location_id, slug) to cluster. If location_slug set, filter to that."""
     with psycopg2.connect(**config) as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            if location_slug:
+                cur.execute(
+                    "SELECT id, slug FROM locations WHERE slug = %s",
+                    (location_slug,),
+                )
+            else:
+                cur.execute(
+                    "SELECT l.id, l.slug FROM locations l "
+                    "WHERE EXISTS (SELECT 1 FROM attractions a WHERE a.location_id = l.id AND a.embedding IS NOT NULL)"
+                )
+            return cur.fetchall()
+
+
+def load_attractions_for_location(
+    config: dict, location_id: int
+) -> Tuple[List[str], np.ndarray]:
+    """Load place_ids and embeddings for one location."""
+    with psycopg2.connect(**config) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
                 SELECT place_id, embedding
                 FROM attractions
-                WHERE embedding IS NOT NULL
-            """)
+                WHERE location_id = %s AND embedding IS NOT NULL
+                """,
+                (location_id,),
+            )
             rows = cur.fetchall()
 
     place_ids = [str(row[0]) for row in rows]
-    # pgvector returns embedding as string '[0.1,0.2,...]' - parse to list
+
     def parse_embedding(emb):
         if emb is None:
             return None
         if isinstance(emb, (list, np.ndarray)):
             return np.asarray(emb, dtype=np.float32)
         return np.array(json.loads(emb) if isinstance(emb, str) else list(emb), dtype=np.float32)
-    embeddings = np.array([parse_embedding(row[1]) for row in rows], dtype=np.float32)
 
-    logger.info(f"Loaded {len(place_ids)} attractions with embeddings")
+    embeddings = np.array([parse_embedding(row[1]) for row in rows], dtype=np.float32)
+    logger.info(f"Loaded {len(place_ids)} attractions for location_id={location_id}")
     return place_ids, embeddings
 
 
@@ -146,42 +167,98 @@ def assign_noise_to_nearest_cluster(
     return out
 
 
-def update_cluster_ids(config: dict, place_ids: List[str], labels: np.ndarray) -> None:
-    """Write cluster_id to database (NULL for noise)."""
-    values = [(int(l) if l >= 0 else None, pid) for pid, l in zip(place_ids, labels)]
+def update_location_clusters(
+    config: dict,
+    location_id: int,
+    place_ids: List[str],
+    labels: np.ndarray,
+) -> None:
+    """Create location_clusters rows and update attractions with location_cluster_id."""
+    unique_labels = sorted(set(int(l) for l in labels if l >= 0))
+    if not unique_labels:
+        logger.warning("No clusters to write")
+        return
+
     with psycopg2.connect(**config) as conn:
         with conn.cursor() as cur:
-            cur.executemany("UPDATE attractions SET cluster_id = %s WHERE place_id = %s", values)
+            # Clear old location_clusters for this location
+            cur.execute("DELETE FROM location_clusters WHERE location_id = %s", (location_id,))
+            # Insert new location_clusters
+            for local_cluster_id in unique_labels:
+                cur.execute(
+                    "INSERT INTO location_clusters (location_id, cluster_id) VALUES (%s, %s) RETURNING id",
+                    (location_id, local_cluster_id),
+                )
+            conn.commit()
+
+            # Build place_id -> location_cluster_id map
+            cur.execute(
+                "SELECT id, cluster_id FROM location_clusters WHERE location_id = %s",
+                (location_id,),
+            )
+            lc_map = {row[1]: row[0] for row in cur.fetchall()}
+
+            # Update attractions
+            updates = []
+            for pid, l in zip(place_ids, labels):
+                lc_id = lc_map.get(int(l)) if l >= 0 else None
+                updates.append((lc_id, pid))
+
+            cur.executemany(
+                "UPDATE attractions SET location_cluster_id = %s WHERE place_id = %s",
+                updates,
+            )
         conn.commit()
-    logger.info(f"Updated {len(place_ids)} rows")
+    logger.info(f"Updated {len(place_ids)} rows for location_id={location_id}")
 
 
 def main():
     config = get_db_config()
+    location_slug = os.getenv("LOCATION_SLUG")
     logger.info(f"Connecting to {config['host']}:{config['port']}/{config['database']}")
 
-    place_ids, embeddings = load_attractions(config)
-    if not place_ids:
-        logger.error("No attractions with embeddings. Run load_places_to_db.py first.")
+    locations = get_location_ids(config, location_slug)
+    if not locations:
+        logger.error(
+            "No locations with embeddings. Run load_places_to_db.py first. "
+            "Or LOCATION_SLUG may not match."
+        )
         sys.exit(1)
 
     n_components = int(os.getenv("UMAP_N_COMPONENTS", "15"))
-    n_neighbors = int(os.getenv("UMAP_N_NEIGHBORS", "15"))
-    min_cluster_size = int(os.getenv("MIN_CLUSTER_SIZE", "5"))
+    n_neighbors = int(os.getenv("UMAP_N_NEIGHBORS", "30"))
+    min_cluster_size_env = os.getenv("MIN_CLUSTER_SIZE")
     min_samples = os.getenv("MIN_SAMPLES")
     min_samples = int(min_samples) if min_samples else None
     cluster_selection = os.getenv("CLUSTER_SELECTION", "eom")
 
-    embeddings_reduced = reduce_with_umap(embeddings, n_components=n_components, n_neighbors=n_neighbors)
-    labels = cluster_hdbscan(
-        embeddings_reduced,
-        min_cluster_size=min_cluster_size,
-        min_samples=min_samples,
-        cluster_selection_method=cluster_selection,
-    )
-    if os.getenv("ASSIGN_NOISE", "0") == "1":
-        labels = assign_noise_to_nearest_cluster(embeddings_reduced, labels)
-    update_cluster_ids(config, place_ids, labels)
+    for location_id, slug in locations:
+        logger.info(f"Clustering location_id={location_id} ({slug})...")
+        place_ids, embeddings = load_attractions_for_location(config, location_id)
+        if not place_ids:
+            logger.warning(f"No attractions for {slug}, skipping")
+            continue
+
+        # Adaptive min_cluster_size for smaller locations (unless explicitly set)
+        if min_cluster_size_env:
+            min_cluster_size = int(min_cluster_size_env)
+        else:
+            n = len(place_ids)
+            min_cluster_size = min(100, max(5, n // 100))
+            logger.info(f"Adaptive min_cluster_size={min_cluster_size} (n={n})")
+
+        embeddings_reduced = reduce_with_umap(
+            embeddings, n_components=n_components, n_neighbors=n_neighbors
+        )
+        labels = cluster_hdbscan(
+            embeddings_reduced,
+            min_cluster_size=min_cluster_size,
+            min_samples=min_samples,
+            cluster_selection_method=cluster_selection,
+        )
+        if os.getenv("ASSIGN_NOISE", "1") == "1":
+            labels = assign_noise_to_nearest_cluster(embeddings_reduced, labels)
+        update_location_clusters(config, location_id, place_ids, labels)
 
     logger.info("Done.")
 

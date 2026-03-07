@@ -11,6 +11,7 @@ spacy>=3.7.0
 # Clustering (UMAP for dim reduction, HDBSCAN for semantic clustering)
 umap-learn>=0.5.5
 hdbscan>=0.8.33
+scipy>=1.11.0
 
 # Visualization
 matplotlib>=3.7.0

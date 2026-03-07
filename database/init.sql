@@ -5,10 +5,35 @@ CREATE DATABASE attractions;
 \c attractions
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- Locations table (cities/regions for multi-city support)
+CREATE TABLE IF NOT EXISTS locations (
+    id SERIAL PRIMARY KEY,
+    slug TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    region TEXT,
+    country TEXT NOT NULL,
+    timezone TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_locations_slug ON locations(slug);
+CREATE INDEX IF NOT EXISTS idx_locations_country ON locations(country);
+
+-- Location clusters: globally unique cluster IDs (location_id + local cluster_id)
+CREATE TABLE IF NOT EXISTS location_clusters (
+    id SERIAL PRIMARY KEY,
+    location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+    cluster_id INTEGER NOT NULL,
+    UNIQUE(location_id, cluster_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_location_clusters_location ON location_clusters(location_id);
+
 -- Attractions table (matches shared/python/models/attraction.py AttractionBase)
 -- Embedding dimension 384 = all-MiniLM-L6-v2
 CREATE TABLE IF NOT EXISTS attractions (
     place_id TEXT PRIMARY KEY,
+    location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
     source TEXT,
     name TEXT NOT NULL,
     categories TEXT[],
@@ -26,11 +51,13 @@ CREATE TABLE IF NOT EXISTS attractions (
     hours TEXT,
     description TEXT,
     embedding vector(384),
-    cluster_id INTEGER,
+    location_cluster_id INTEGER REFERENCES location_clusters(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_attractions_cluster_id ON attractions (cluster_id);
+CREATE INDEX IF NOT EXISTS idx_attractions_location_id ON attractions(location_id);
+CREATE INDEX IF NOT EXISTS idx_attractions_location_cluster ON attractions(location_cluster_id);
+CREATE INDEX IF NOT EXISTS idx_attractions_location_cluster_composite ON attractions(location_id, location_cluster_id);
 
 -- Create the users database (for users, trips, preferences)
 CREATE DATABASE users;

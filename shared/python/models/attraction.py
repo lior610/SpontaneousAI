@@ -26,8 +26,8 @@ class AttractionBase(BaseModel):
     hours: Optional[str] = None
     description: Optional[str] = None  # text description used to generate embedding
     embedding: Optional[List[float]] = None  # vector embedding for pgvector similarity search
-    cluster_id: Optional[int] = None  # HDBSCAN/DBSCAN cluster assignment (-1 = noise)
-    similarity: Optional[float] = None  # returned by vector search
+    location_id: Optional[int] = None  # FK to locations
+    location_cluster_id: Optional[int] = None  # FK to location_clusters (HDBSCAN cluster per location)
 
 
 class AttractionCreate(AttractionBase):
