@@ -54,21 +54,21 @@ services:
       - api
     command: npm run dev
 
-  foursquare-scraper-ny:
-    build: ./data-pipeline/src/scrapers/foursquare
-    env_file: .env
-    volumes:
-      - ./data-pipeline/src/scrapers/foursquare:/app
-      # Mount shared python if needed, matching other services
-      - ./shared/python:/shared-python
-    environment:
-      - PYTHONPATH=/app:/shared-python
-      - FOURSQUARE_OUTPUT_FILE=foursquare_ny_attractions.json
-      - FOURSQUARE_LAT_MIN=40.49
-      - FOURSQUARE_LAT_MAX=40.92
-      - FOURSQUARE_LON_MIN=-74.27
-      - FOURSQUARE_LON_MAX=-73.68
-    # No ports needed as it's a background worker
+  # foursquare-scraper-ny:
+  #   build: ./data-pipeline/scrapers
+  #   env_file: .env
+  #   volumes:
+  #     - ./data-pipeline/scrapers:/app
+  #     # Mount shared python if needed, matching other services
+  #     - ./shared/python:/shared-python
+  #   environment:
+  #     - PYTHONPATH=/app:/shared-python
+  #     - FOURSQUARE_OUTPUT_FILE=foursquare_ny_attractions.json
+  #     - FOURSQUARE_LAT_MIN=40.49
+  #     - FOURSQUARE_LAT_MAX=40.92
+  #     - FOURSQUARE_LON_MIN=-74.27
+  #     - FOURSQUARE_LON_MAX=-73.68
+  #   # No ports needed as it's a background worker
 
 volumes:
   postgres_data:

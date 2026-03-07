@@ -123,37 +123,30 @@ def execute_similarity_query(
         The similarity score is calculated as: 1 - (cosine_distance / 2)
         This gives a score from 0-1 where 1 is identical and 0 is completely different.
     """
-    # Base query: select all attraction fields plus similarity score
+    # Base query: select all attraction fields plus similarity score (matches AttractionBase model)
     query = """
         SELECT 
-            activity_id,
+            place_id as activity_id,
             source,
-            source_ref,
-            created_at,
-            updated_at,
-            last_seen_at,
+            place_id,
             name,
-            short_description,
             categories,
-            tags,
-            good_for,
-            indoor_outdoor,
-            typical_duration_min,
-            effort_level,
-            lat,
-            lng,
+            category_id,
+            latitude,
+            longitude,
+            address,
             city,
+            region,
             country,
-            opening_hours,
-            is_open_now,
-            timezone,
-            price_level,
-            estimated_cost_bucket,
-            rating,
-            requires_booking,
-            age_min,
-            accessibility_features,
+            telephone,
+            url,
+            type,
+            budget,
+            hours,
+            description,
             embedding,
+            cluster_id,
+            created_at,
             (1 - (embedding <=> %s::vector) / 2) as similarity
         FROM attractions
         WHERE embedding IS NOT NULL
