@@ -14,6 +14,7 @@
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+Set-Location $ProjectRoot  # Ensure .env and relative paths resolve correctly
 $DataDir = Join-Path $ProjectRoot "data-pipeline\scrapers\data"
 
 $jsonFiles = Get-ChildItem -Path $DataDir -Filter "places_enriched.json" -Recurse -ErrorAction SilentlyContinue

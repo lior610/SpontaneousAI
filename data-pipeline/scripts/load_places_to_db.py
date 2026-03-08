@@ -24,15 +24,15 @@ import sys
 import logging
 from pathlib import Path
 
-# Load .env if present
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
 from typing import List, Dict, Any, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# Load .env from project root (for POSTGRES_* etc.)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(PROJECT_ROOT / ".env", override=True)
+except ImportError:
+    pass
 sys.path.insert(0, str(PROJECT_ROOT / "shared" / "python"))
 
 import psycopg2

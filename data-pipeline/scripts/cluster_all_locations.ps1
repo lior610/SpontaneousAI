@@ -14,6 +14,7 @@
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+Set-Location $ProjectRoot  # Ensure .env and relative paths resolve correctly
 
 python (Join-Path $ProjectRoot "data-pipeline\scripts\cluster_attractions.py")
 if ($LASTEXITCODE -ne 0) {

@@ -115,3 +115,40 @@ CREATE TABLE IF NOT EXISTS trips (
 
 CREATE INDEX IF NOT EXISTS idx_trips_user_id ON trips(user_id);
 CREATE INDEX IF NOT EXISTS idx_trips_dates ON trips(start_date, end_date);
+
+-- Enable pgvector in client_info DB (needed for user_preference_embeddings)
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Per-trip preference embeddings.
+-- One row is upserted per trip:
+--   - Initialized from trip setup (category weights + qualifier text)
+--   - Updated by EMA as the user likes attractions during the trip
+--   - Past rows feed the "historical" signal for future trips.
+CREATE TABLE IF NOT EXISTS user_preference_embeddings (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    trip_id INTEGER REFERENCES trips(trip_id) ON DELETE SET NULL,
+    preference_text TEXT,           -- human-readable debug string (what was embedded)
+    embedding vector(384) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_upref_user_id ON user_preference_embeddings(user_id);
+CREATE INDEX IF NOT EXISTS idx_upref_trip_id ON user_preference_embeddings(trip_id);
+
+-- Real-time trip feedback: tracks each user interaction with an attraction.
+-- Actions:
+--   liked   - user explicitly liked the attraction (used for EMA update)
+--   skipped - user dismissed the attraction (excluded from future retrieval this trip)
+--   visited - user actually went there (excluded from future retrieval this trip)
+CREATE TABLE IF NOT EXISTS trip_feedback (
+    id SERIAL PRIMARY KEY,
+    trip_id INTEGER NOT NULL REFERENCES trips(trip_id) ON DELETE CASCADE,
+    place_id TEXT NOT NULL,
+    action VARCHAR(10) NOT NULL CHECK (action IN ('liked', 'skipped', 'visited')),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_trip_id ON trip_feedback(trip_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_trip_place ON trip_feedback(trip_id, place_id);
