@@ -223,6 +223,9 @@ def upsert_places(conn, places: List[Dict[str, Any]], model, location_id: int) -
                 p.get("hours"),
                 desc,
                 format_embedding_for_pgvector(emb.tolist()),
+                p.get("popularity"),
+                p.get("image_url"),
+                p.get("wikipedia_extract"),
             ))
 
         with conn.cursor() as cur:
@@ -232,7 +235,8 @@ def upsert_places(conn, places: List[Dict[str, Any]], model, location_id: int) -
                 INSERT INTO attractions (
                     place_id, location_id, source, name, categories, category_id,
                     latitude, longitude, address, city, region, country,
-                    telephone, url, type, budget, hours, description, embedding
+                    telephone, url, type, budget, hours, description, embedding,
+                    popularity, image_url, wikipedia_extract
                 ) VALUES %s
                 ON CONFLICT (place_id) DO UPDATE SET
                     location_id = EXCLUDED.location_id,
@@ -252,7 +256,10 @@ def upsert_places(conn, places: List[Dict[str, Any]], model, location_id: int) -
                     budget = EXCLUDED.budget,
                     hours = EXCLUDED.hours,
                     description = EXCLUDED.description,
-                    embedding = EXCLUDED.embedding
+                    embedding = EXCLUDED.embedding,
+                    popularity = EXCLUDED.popularity,
+                    image_url = EXCLUDED.image_url,
+                    wikipedia_extract = EXCLUDED.wikipedia_extract
                 """,
                 rows,
             )
