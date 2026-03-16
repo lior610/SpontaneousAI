@@ -6,7 +6,16 @@ import psycopg2
 import psycopg2.pool
 import os
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Optional, Generator
+
+try:
+    from dotenv import load_dotenv
+    _env_file = Path(__file__).resolve().parents[3] / ".env"
+    if _env_file.exists():
+        load_dotenv(_env_file, override=True)
+except ImportError:
+    pass
 
 # Connection pool configuration
 _pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
