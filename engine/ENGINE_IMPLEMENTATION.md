@@ -39,11 +39,12 @@ The final score is a pure mathematical calculation (no runtime ML inference) wei
 
 The engine dynamically adjusts recommendations mid-trip without requiring heavy backend tasks or ML training.
 
-### How it Works:
-- When a user interacts with a recommendation (`liked`, `skipped`, `visited`), a `POST /feedback` request is triggered.
-- The `FeedbackService` (`feedback_service.py:process_feedback`) persists the action into the `trip_feedback` table.
-- If the action is `liked`, the `PreferenceComposer` (`preference_service.py:update_preference_with_feedback`) performs an **Exponential Moving Average (EMA)** update on the user's current trip embedding using the liked attraction's vector.
-- The EMA update dynamically nudges the preference vector toward the newly liked attraction (`preference_queries.py:upsert_preference_embedding`). The very next time the vector search runs, it uses this fresh vector, automatically skewing the results slightly toward similar attractions while still maintaining overall context.
+### The 5-File Architecture Pipeline:
+1. **The API Entry Point (`internal-routes/recommendations.py`)**: The `POST /recommendations/feedback` endpoint receives the user's action (`"liked"`, `"skipped"`, or `"visited"`) along with the specific `place_id`.
+2. **The Business Logic Manager (`services/feedback_service.py`)**: The `process_feedback()` function decides what to do next. It logs the action to the DB immediately, and if (and only if) the action was `"liked"`, it triggers the mathematical AI Vector update.
+3. **The Database Logger (`db/feedback_queries.py`)**: This file handles the raw SQL connection. It contains the `INSERT` query that permanently stamps the action into the `trip_feedback` table. It also contains `get_excluded_place_ids`, which blocks them from ever being recommended again.
+4. **The EMA Math Engine (`services/preference_service.py`)**: Inside `PreferenceComposer.apply_feedback()`, the engine calculates the **Exponential Moving Average (EMA)**. It dynamically pulls the user's core trip vector mathematically closer to the vector of the attraction they just liked in 384-dimensional space.
+5. **The State Saver (`db/preference_queries.py`)**: `upsert_preference_embedding` physically saves the new, dynamically evolved vector back into the `user_preference_embeddings` PostgreSQL table. This fundamentally overwrites their old profile, completely changing the results of their next API call!
 
 ## 4. API Endpoints
 **Core Files:**
@@ -168,3 +169,14 @@ This is the organic re-sorting mechanism!
 - **Positive Diversity**: If an attraction has a category the user hasn't seen yet (e.g., "Museum" when all previous recommendations were "Cafes"), we add `+0.05` to their score.
 - **Negative Cluster Penalty**: We track how many times we've recommended something from `location_cluster_id = 33`. The first attraction from Cluster 33 gets `0` penalty. The second attraction gets a small penalty (e.g., `-0.05`). The third gets `-0.10`. 
 This mathematical penalty ensures that a slightly less relevant attraction in a *different* neighborhood (Cluster 40) will mathematically overtake the third attraction in Cluster 33, naturally forcing the engine to recommend a diverse geographic spread!
+
+### Real-Time Feedback Loop
+
+**Q: What is the difference between visited and skipped? Why don't we give it attention?**  
+They both serve identically as purely *negative filters*. When a user clicks "skip" or "visit", the system logs that place into `trip_feedback` merely so it can be blocked (`NOT IN`) from ever appearing again on the trip. We intentionally DO NOT update the AI vector on a "skip" because shifting the vector mathematically *away* from a skipped place is extremely risky. For example, if a user skips a highly-rated pizza place solely because they aren't hungry right now, mathematically moving their entire user personality *away* from Italian Food ruins the integrity of their profile. We only reward positive signals; we don't attempt to punish negative ones mathematically.
+
+**Q: What does `ON CONFLICT (trip_id, place_id) DO UPDATE` do? (`feedback_queries.py:L142`)**  
+This is PostgreSQL's exact native syntax for an "Upsert". The database table `trip_feedback` has a `UNIQUE` combination lock on `(trip_id, place_id)`—you physically cannot have two records for the exact same attraction on the same trip. If a user "skips" a place, but later changes their mind and "likes" it, the database hits a conflict trying to insert the second row. Instead of crashing Python, `DO UPDATE SET action = EXCLUDED.action` gracefully overwrites the action from "skipped" to "liked".
+
+**Q: 0.3 for EMA_ALPHA isn't extremely high? If I go to Cafe once my vector changes entirely. (`preference_service.py:L180`)**  
+It may seem inherently high, but Exponential Moving Averages (EMA) work linearly against the *remaining* weight (`1 - EMA_ALPHA`), which is 0.7. So the new Cafe embedding is worth exactly 30%, while the user's core massive foundational profile still owns a powerful 70% of the mathematical gravity. 30% is high enough to confidently skew the upcoming cluster searches to rapidly notice Cafes nearby, but mathematically not high enough to completely erase their original trip setup (like Museums or Parks) out of the vector space. It ensures the app is highly responsive to real-time mood swings without instantly inducing amnesia!

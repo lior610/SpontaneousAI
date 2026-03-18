@@ -57,6 +57,7 @@ share/python-wheels/
 .coverage.*
 htmlcov/
 api_response_test*.json
+simulation_*_analytics.json
 
 # Jupyter
 .ipynb_checkpoints
