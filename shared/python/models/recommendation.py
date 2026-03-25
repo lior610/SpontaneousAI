@@ -10,11 +10,8 @@ class RecommendationRequest(BaseModel):
     """Schema for requesting a recommendation"""
     user_id: int
     trip_id: int
-    location_id: int
     current_location: Optional[dict] = None  # {"lat": float, "lng": float}
     current_time: Optional[datetime] = None  # Local time at the destination ideally
-    travel_style: Optional[str] = 'balanced' # budget, balanced, premium
-    max_walk_km: Optional[float] = 2.0
     context: Optional[dict] = None  # weather, time_of_day, etc.
     
 class RecommendationFeedback(BaseModel):

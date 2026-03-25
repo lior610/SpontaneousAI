@@ -34,36 +34,68 @@ async def get_recommendations(req: RecommendationRequest):
             force_rebuild=False
         )
         
-        # 2. Retrieve Cluster-Diverse Candidates
-        # Here we extract hard filters from context if any (e.g. is_open)
+        # 2. Extract Hard Filters
         filters = {}
         # if req.context and req.context.get('is_open'):
         #     filters['hours'] = ...
-            
+        
         user_lat = req.current_location.get('lat') if req.current_location else None
         user_lng = req.current_location.get('lng') if req.current_location else None
         current_hour = req.current_time.hour if req.current_time else None
             
+        try:
+            from db.usersConnection import get_db_connection as get_users_conn
+            from src.db.feedback_queries import get_excluded_place_ids
+            from src.db.user_queries import get_trip, get_user
+            from db.attractionsConnection import get_db_connection as get_attr_conn
+            from src.db.feedback_queries import get_attraction_categories
+            
+            with get_users_conn() as users_conn:
+                excluded_ids = list(get_excluded_place_ids(users_conn, req.trip_id))
+                trip_data = get_trip(users_conn, req.trip_id)
+                user_data = get_user(users_conn, req.user_id)
+                
+            if not trip_data or not user_data:
+                raise HTTPException(status_code=404, detail="Trip or User not found in database.")
+                
+            db_travel_style = user_data.get('travel_style')
+            db_max_walk_km = trip_data.get('max_walking_distance')
+            if not db_travel_style or db_max_walk_km is None:
+                raise HTTPException(status_code=500, detail="Missing travel_style or max_walking_distance in database.")
+            db_max_walk_km = float(db_max_walk_km)
+            
+            dest = trip_data.get("destination")
+            if not dest:
+                raise HTTPException(status_code=500, detail="Missing destination in database.")
+                
+            with get_attr_conn() as attr_conn:
+                cursor = attr_conn.cursor()
+                cursor.execute("SELECT id FROM locations WHERE LOWER(name) = LOWER(%s)", (dest,))
+                row = cursor.fetchone()
+                cursor.close()
+                if not row:
+                    raise HTTPException(status_code=500, detail=f"Destination '{dest}' not found in locations table.")
+                db_location_id = row[0]
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception(f"Could not load explicitly DB limits: {e}")
+            raise HTTPException(status_code=500, detail=f"Internal Server Error retrieving DB trip bounds: {e}")
+            
+        # 3. Retrieve Cluster-Diverse Candidates
         candidates = cluster_retrieval.get_candidate_pool(
-            location_id=req.location_id,
+            location_id=db_location_id,
             trip_id=req.trip_id,
             preference_vector=preference_vector,
             context_filters=filters,
             user_lat=user_lat,
             user_lng=user_lng,
-            max_walk_km=req.max_walk_km,
+            max_walk_km=db_max_walk_km,
             current_hour=current_hour
         )
         
-        # 3. Retrieve Explicitly Seen Categories for Diversity Ranking
         try:
-            from db.usersConnection import get_db_connection as get_users_conn
-            from db.attractionsConnection import get_db_connection as get_attr_conn
-            from src.db.feedback_queries import get_excluded_place_ids, get_attraction_categories
-            
-            with get_users_conn() as users_conn:
-                excluded_ids = list(get_excluded_place_ids(users_conn, req.trip_id))
-            
             real_seen_categories = set()
             if excluded_ids:
                 with get_attr_conn() as attr_conn:
@@ -78,8 +110,8 @@ async def get_recommendations(req: RecommendationRequest):
             candidates=candidates,
             user_lat=user_lat,
             user_lng=user_lng,
-            max_walk_km=req.max_walk_km,
-            travel_style=req.travel_style,
+            max_walk_km=db_max_walk_km,
+            travel_style=db_travel_style,
             current_hour=current_hour,
             real_seen_categories=real_seen_categories
         )

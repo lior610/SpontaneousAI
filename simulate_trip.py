@@ -51,11 +51,8 @@ def fetch_recommendations(case, current_lat, current_lng, current_time):
     payload = {
         "user_id": case["user_id"],
         "trip_id": case["trip_id"],
-        "location_id": case["location_id"],
         "current_location": {"lat": current_lat, "lng": current_lng},
-        "current_time": current_time,
-        "travel_style": case["travel_style"],
-        "max_walk_km": case["max_walk_km"]
+        "current_time": current_time
     }
     
     req = urllib.request.Request(
@@ -145,6 +142,8 @@ def run_simulation(hops=3):
                         "rank": idx + 1,
                         "name": c['attraction']['name'],
                         "category": c['attraction']['categories'],
+                        "cluster_id": c['attraction'].get('location_cluster_id'),
+                        "distance_km": round(c.get('distance_km', 0), 2),
                         "final_score": c.get('score', 0),
                         "mathematics": math_dict
                     })
@@ -155,7 +154,8 @@ def run_simulation(hops=3):
                 except:
                     top_math_dict = {}
                 
-                print(f"    -> Engine Recommended: {name} ({category}) | Score: {top_hit.get('score', top_hit.get('final_score'))}")
+                distance_km = top_hit.get('distance_km', 0)
+                print(f"    -> Engine Recommended: {name} ({category}) | Dist: {round(distance_km, 2)}km | Score: {top_hit.get('score', top_hit.get('final_score'))}")
                 print(f"    -> User 'likes' {name}. Truncating vector towards {category}...")
                 
                 # Log Hop details mathematically
@@ -170,6 +170,8 @@ def run_simulation(hops=3):
                         "attraction_name": name,
                         "place_id": place_id,
                         "category": category,
+                        "cluster_id": top_hit['attraction'].get('location_cluster_id'),
+                        "distance_km": round(distance_km, 2),
                         "semantic_affinity": top_math_dict.get('semantic', "N/A"),
                         "distance_penalty": top_math_dict.get('distance', "N/A")
                     },
@@ -194,7 +196,7 @@ def run_simulation(hops=3):
                 break
         
         # 6. Safety Teardown Validation
-        teardown_database_state(case['trip_id'])
+        #teardown_database_state(case['trip_id'])
         
         # 7. Dump Deep Analysis JSON
         file_name = f"simulation_user_{case['user_id']}_analytics.json"
