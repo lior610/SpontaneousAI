@@ -78,6 +78,7 @@ def execute_cluster_similarity_query(
         FROM attractions
         WHERE location_id = %s
           AND embedding IS NOT NULL
+          AND type != 'utility'
     """
     
     params: List[Any] = [embedding_str, embedding_str, embedding_str, location_id]

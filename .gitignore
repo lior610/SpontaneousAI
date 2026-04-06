@@ -58,6 +58,7 @@ share/python-wheels/
 htmlcov/
 api_response_test*.json
 simulation_*_analytics.json
+utilities_test_output*.json
 
 # Jupyter
 .ipynb_checkpoints
@@ -86,3 +87,4 @@ logs/
 # package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
+.agents/**

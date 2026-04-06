@@ -196,7 +196,7 @@ def run_simulation(hops=3):
                 break
         
         # 6. Safety Teardown Validation
-        #teardown_database_state(case['trip_id'])
+        teardown_database_state(case['trip_id'])
         
         # 7. Dump Deep Analysis JSON
         file_name = f"simulation_user_{case['user_id']}_analytics.json"

@@ -28,6 +28,7 @@ class AttractionBase(BaseModel):
     embedding: Optional[List[float]] = None  # vector embedding for pgvector similarity search
     location_id: Optional[int] = None  # FK to locations
     location_cluster_id: Optional[int] = None  # FK to location_clusters (HDBSCAN cluster per location)
+    distance: Optional[float] = None  # Distance to the user request
 
 
 class AttractionCreate(AttractionBase):

@@ -38,6 +38,9 @@ from .destination import (
     DestinationResponse,
     DestinationStatus
 )
+from .utility import (
+    UtilityRequest
+)
 
 __all__ = [
     # Attraction
@@ -71,4 +74,7 @@ __all__ = [
     'DestinationUpdate',
     'DestinationResponse',
     'DestinationStatus',
+    # Utility
+    'UtilityRequest',
 ]
+
