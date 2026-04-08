@@ -22,7 +22,7 @@ export const LoginPage = () => {
     try {
       const user = await loginUser(loginEmail, loginPassword);
       setCurrentUser(user);
-      navigate("/wizard");
+      navigate("/");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to login";
       setError(message);
@@ -50,7 +50,7 @@ export const LoginPage = () => {
     try {
       const user = await registerUser(registerName, trimmedEmail, registerPassword);
       setCurrentUser(user);
-      navigate("/wizard");
+      navigate("/");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to register";
       setError(message);

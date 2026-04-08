@@ -88,3 +88,24 @@ CREATE TABLE IF NOT EXISTS trips (
 
 CREATE INDEX IF NOT EXISTS idx_trips_user_id ON trips(user_id);
 CREATE INDEX IF NOT EXISTS idx_trips_dates ON trips(start_date, end_date);
+
+-- Activity completion logs (only activities the user actually completed)
+CREATE TABLE IF NOT EXISTS trip_activity_logs (
+    id SERIAL PRIMARY KEY,
+    trip_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    category VARCHAR(20),
+    address TEXT,
+    estimated_time VARCHAR(100),
+    cost VARCHAR(20),
+    rating NUMERIC(3, 2),
+    review_count INTEGER,
+    feedback JSONB,
+    completed_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT trip_activity_logs_trip_id_fkey FOREIGN KEY (trip_id) REFERENCES trips(trip_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_trip_activity_logs_trip_id ON trip_activity_logs(trip_id);
+CREATE INDEX IF NOT EXISTS idx_trip_activity_logs_completed_at ON trip_activity_logs(completed_at);

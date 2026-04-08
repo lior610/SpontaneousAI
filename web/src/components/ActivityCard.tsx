@@ -1,5 +1,6 @@
 import { MapPin, Navigation, Star, Clock, DollarSign, ExternalLink } from 'lucide-react';
 import { Activity } from '@/types/trip';
+import { featureFlags } from '@/config/featureFlags';
 
 interface ActivityCardProps {
   activity: Activity;
@@ -38,11 +39,19 @@ export function ActivityCard({ activity, onComplete, isLoading }: ActivityCardPr
               {categoryIcons[activity.category]} {activity.category.charAt(0).toUpperCase() + activity.category.slice(1)}
             </span>
           </div>
-          <div className="flex items-center gap-1 text-accent">
-            <Star className="w-4 h-4 fill-accent" />
-            <span className="font-semibold">{activity.rating}</span>
-            <span className="text-muted-foreground text-sm">({activity.reviewCount})</span>
-          </div>
+          {(featureFlags.tripSuggestionCard.showRating || featureFlags.tripSuggestionCard.showReviewCount) && (
+            <div className="flex items-center gap-1 text-accent">
+              {featureFlags.tripSuggestionCard.showRating && (
+                <>
+                  <Star className="w-4 h-4 fill-accent" />
+                  <span className="font-semibold">{activity.rating}</span>
+                </>
+              )}
+              {featureFlags.tripSuggestionCard.showReviewCount && (
+                <span className="text-muted-foreground text-sm">({activity.reviewCount})</span>
+              )}
+            </div>
+          )}
         </div>
         <h3 className="text-lg font-bold mt-3">{activity.title}</h3>
       </div>
@@ -54,10 +63,12 @@ export function ActivityCard({ activity, onComplete, isLoading }: ActivityCardPr
 
         {/* Quick Info */}
         <div className="flex flex-wrap gap-3">
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Clock className="w-4 h-4 text-primary" />
-            <span>{activity.estimatedTime}</span>
-          </div>
+          {featureFlags.tripSuggestionCard.showEstimatedTime && (
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Clock className="w-4 h-4 text-primary" />
+              <span>{activity.estimatedTime}</span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <DollarSign className="w-4 h-4 text-secondary" />
             <span>{activity.cost}</span>

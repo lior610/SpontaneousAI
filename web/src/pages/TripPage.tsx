@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Settings, MapPin, RefreshCw, LogOut } from 'lucide-react';
+import { Settings, MapPin, RefreshCw, LogOut, Home, Briefcase } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { ActivityCard } from '@/components/ActivityCard';
 import { FeedbackPopup } from '@/components/FeedbackPopup';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
@@ -13,6 +14,7 @@ export function TripPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const state = (location.state as { tripSetup?: TripSetup; tripId?: number }) ?? {};
+  const tripId = state.tripId;
   const tripSetup: TripSetup = state.tripSetup ?? defaultTripSetup;
   // state.tripId is the created trip id from the wizard (for future API calls e.g. next activity)
 
@@ -20,6 +22,7 @@ export function TripPage() {
   const [completedActivities, setCompletedActivities] = useState<Activity[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -36,8 +39,13 @@ export function TripPage() {
   };
 
   const handleFeedbackSubmit = async (feedback: Activity['feedback'], needSpecific?: string) => {
+    if (!tripId) {
+      setShowFeedback(false);
+      return;
+    }
+
     if (currentActivity) {
-      await completeActivity(currentActivity, feedback);
+      await completeActivity(tripId, currentActivity, feedback);
       setCompletedActivities(prev => [...prev, { ...currentActivity, completed: true, feedback }]);
     }
     setShowFeedback(false);
@@ -50,6 +58,7 @@ export function TripPage() {
 
   const handleLogout = () => {
     clearCurrentUser();
+    setShowLogoutConfirm(false);
     navigate('/', { replace: true });
   };
 
@@ -70,6 +79,20 @@ export function TripPage() {
             </div>
             <div className="flex gap-2">
               <button
+                onClick={() => navigate('/')}
+                className="w-10 h-10 flex items-center justify-center rounded-lg text-foreground hover:bg-muted transition-all"
+                title="Back to homepage"
+              >
+                <Home className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => navigate('/trips')}
+                className="w-10 h-10 flex items-center justify-center rounded-lg text-foreground hover:bg-muted transition-all"
+                title="Manage trips"
+              >
+                <Briefcase className="w-5 h-5" />
+              </button>
+              <button
                 onClick={() => navigate('/wizard', { state: { tripSetup } })}
                 className="w-10 h-10 flex items-center justify-center rounded-lg text-foreground hover:bg-muted transition-all"
                 title="Trip settings"
@@ -77,7 +100,7 @@ export function TripPage() {
                 <Settings className="w-5 h-5" />
               </button>
               <button
-                onClick={handleLogout}
+                onClick={() => setShowLogoutConfirm(true)}
                 className="w-10 h-10 flex items-center justify-center rounded-lg text-foreground hover:bg-muted transition-all"
                 title="Log out"
               >
@@ -163,6 +186,27 @@ export function TripPage() {
           onSubmit={handleFeedbackSubmit}
           onClose={() => setShowFeedback(false)}
         />
+      )}
+
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-foreground/45 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md rounded-2xl border bg-card shadow-2xl animate-scale-in">
+            <div className="p-5">
+              <h3 className="text-lg font-semibold">Log out?</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                You will need to log in again to continue.
+              </p>
+            </div>
+            <div className="px-5 pb-5 flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowLogoutConfirm(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" size="sm" onClick={handleLogout}>
+                Log Out
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
