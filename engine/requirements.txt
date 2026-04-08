@@ -5,6 +5,9 @@ psycopg2-binary==2.9.9
 pydantic==2.5.0
 email-validator>=2.0.0
 
+# ML stack: NumPy 2.x breaks many torch wheels; huggingface-hub 1.x breaks current transformers pins
+numpy>=1.24.0,<2.0.0
+huggingface-hub>=0.34.0,<1.0.0
 sentence-transformers>=2.2.0
 
 # Testing

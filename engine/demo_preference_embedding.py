@@ -26,6 +26,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "engine"))
 sys.path.insert(0, str(PROJECT_ROOT / "shared" / "python"))
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(PROJECT_ROOT / ".env", override=True)
+except ImportError:
+    logger.warning(
+        "Install python-dotenv (`pip install python-dotenv`) so POSTGRES_* "
+        "values are read from .env; otherwise defaults like host 'db' apply."
+    )
+
 # ---------------------------------------------------------------------------
 # Persona definitions
 # ---------------------------------------------------------------------------
