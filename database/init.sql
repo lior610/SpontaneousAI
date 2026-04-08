@@ -5,10 +5,35 @@ CREATE DATABASE attractions;
 \c attractions
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- Locations table (cities/regions for multi-city support)
+CREATE TABLE IF NOT EXISTS locations (
+    id SERIAL PRIMARY KEY,
+    slug TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    region TEXT,
+    country TEXT NOT NULL,
+    timezone TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_locations_slug ON locations(slug);
+CREATE INDEX IF NOT EXISTS idx_locations_country ON locations(country);
+
+-- Location clusters: globally unique cluster IDs (location_id + local cluster_id)
+CREATE TABLE IF NOT EXISTS location_clusters (
+    id SERIAL PRIMARY KEY,
+    location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+    cluster_id INTEGER NOT NULL,
+    UNIQUE(location_id, cluster_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_location_clusters_location ON location_clusters(location_id);
+
 -- Attractions table (matches shared/python/models/attraction.py AttractionBase)
 -- Embedding dimension 384 = all-MiniLM-L6-v2
 CREATE TABLE IF NOT EXISTS attractions (
     place_id TEXT PRIMARY KEY,
+    location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
     source TEXT,
     name TEXT NOT NULL,
     categories TEXT[],
@@ -26,11 +51,17 @@ CREATE TABLE IF NOT EXISTS attractions (
     hours TEXT,
     description TEXT,
     embedding vector(384),
-    cluster_id INTEGER,
+    location_cluster_id INTEGER REFERENCES location_clusters(id) ON DELETE SET NULL,
+    -- OpenTripMap enrichment (popularity 3→1, 2→0.7, 1→0.4, no match→0.2)
+    popularity NUMERIC(4, 3) CHECK (popularity >= 0 AND popularity <= 1),
+    image_url TEXT,
+    wikipedia_extract TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_attractions_cluster_id ON attractions (cluster_id);
+CREATE INDEX IF NOT EXISTS idx_attractions_location_id ON attractions(location_id);
+CREATE INDEX IF NOT EXISTS idx_attractions_location_cluster ON attractions(location_cluster_id);
+CREATE INDEX IF NOT EXISTS idx_attractions_location_cluster_composite ON attractions(location_id, location_cluster_id);
 
 -- Create the client_info database (for users, trips, preferences)
 CREATE DATABASE client_info;
@@ -88,3 +119,40 @@ CREATE TABLE IF NOT EXISTS trips (
 
 CREATE INDEX IF NOT EXISTS idx_trips_user_id ON trips(user_id);
 CREATE INDEX IF NOT EXISTS idx_trips_dates ON trips(start_date, end_date);
+
+-- Enable pgvector in client_info DB (needed for user_preference_embeddings)
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Per-trip preference embeddings.
+-- One row is upserted per trip:
+--   - Initialized from trip setup (category weights + qualifier text)
+--   - Updated by EMA as the user likes attractions during the trip
+--   - Past rows feed the "historical" signal for future trips.
+CREATE TABLE IF NOT EXISTS user_preference_embeddings (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    trip_id INTEGER REFERENCES trips(trip_id) ON DELETE SET NULL,
+    preference_text TEXT,           -- human-readable debug string (what was embedded)
+    embedding vector(384) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_upref_user_id ON user_preference_embeddings(user_id);
+CREATE INDEX IF NOT EXISTS idx_upref_trip_id ON user_preference_embeddings(trip_id);
+
+-- Real-time trip feedback: tracks each user interaction with an attraction.
+-- Actions:
+--   liked   - user explicitly liked the attraction (used for EMA update)
+--   skipped - user dismissed the attraction (excluded from future retrieval this trip)
+--   visited - user actually went there (excluded from future retrieval this trip)
+CREATE TABLE IF NOT EXISTS trip_feedback (
+    id SERIAL PRIMARY KEY,
+    trip_id INTEGER NOT NULL REFERENCES trips(trip_id) ON DELETE CASCADE,
+    place_id TEXT NOT NULL,
+    action VARCHAR(10) NOT NULL CHECK (action IN ('liked', 'skipped', 'visited')),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_trip_id ON trip_feedback(trip_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_trip_place ON trip_feedback(trip_id, place_id);

@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-Plot all clusters from the database.
+Plot clusters from the database.
 
-Loads attractions (place_id, embedding, cluster_id), reduces embeddings to 2D
-with UMAP, and creates a scatter plot colored by cluster_id.
+Loads attractions (place_id, embedding, location_cluster_id), reduces to 2D
+with UMAP, and creates a scatter plot colored by cluster.
 
 Usage:
     python data-pipeline/scripts/plot_clusters.py [--output clusters.png]
+    python data-pipeline/scripts/plot_clusters.py --location london -o london_clusters.png
 
-Env vars: same as cluster_attractions.py (POSTGRES_*)
+Env vars: LOCATION_SLUG (optional), POSTGRES_*
 """
 import argparse
 import json
@@ -19,6 +20,13 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "shared" / "python"))
+
+# Load .env from project root (for POSTGRES_* etc.)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(PROJECT_ROOT / ".env", override=True)
+except ImportError:
+    pass
 
 import numpy as np
 import psycopg2
@@ -40,15 +48,23 @@ def get_db_config() -> dict:
     }
 
 
-def load_clusters(config: dict):
-    """Load place_id, embedding, cluster_id from database."""
+def load_clusters(config: dict, location_slug: str = None):
+    """Load place_id, embedding, location_cluster_id from database. Optionally filter by location."""
     with psycopg2.connect(**config) as conn:
         with conn.cursor() as cur:
-            cur.execute("""
-                SELECT place_id, embedding, cluster_id
-                FROM attractions
-                WHERE embedding IS NOT NULL
-            """)
+            if location_slug:
+                cur.execute("""
+                    SELECT a.place_id, a.embedding, a.location_cluster_id
+                    FROM attractions a
+                    JOIN locations l ON a.location_id = l.id
+                    WHERE a.embedding IS NOT NULL AND l.slug = %s
+                """, (location_slug,))
+            else:
+                cur.execute("""
+                    SELECT place_id, embedding, location_cluster_id
+                    FROM attractions
+                    WHERE embedding IS NOT NULL
+                """)
             rows = cur.fetchall()
 
     def parse_embedding(emb):
@@ -154,12 +170,19 @@ def main():
         default="clusters_plot.png",
         help="Output image path (default: clusters_plot.png)",
     )
+    parser.add_argument(
+        "--location", "-l",
+        default=None,
+        help="Location slug to plot (e.g. london). Else plots all.",
+    )
     args = parser.parse_args()
+
+    location_slug = args.location or os.getenv("LOCATION_SLUG")
 
     config = get_db_config()
     logger.info(f"Connecting to {config['host']}:{config['port']}/{config['database']}")
 
-    place_ids, embeddings, cluster_ids = load_clusters(config)
+    place_ids, embeddings, cluster_ids = load_clusters(config, location_slug)
     if not place_ids:
         logger.error("No attractions with embeddings. Run load_places_to_db.py first.")
         sys.exit(1)

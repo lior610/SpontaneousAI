@@ -145,7 +145,8 @@ def execute_similarity_query(
             hours,
             description,
             embedding,
-            cluster_id,
+            location_id,
+            location_cluster_id,
             created_at,
             (1 - (embedding <=> %s::vector) / 2) as similarity
         FROM attractions

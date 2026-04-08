@@ -10,6 +10,7 @@ Usage:
 
 Env vars:
     PLACES_JSON       - Path to places_enriched.json
+    LOCATION_SLUG     - Location slug (e.g. london_gb, ny_us). Inferred from path if not set.
     BATCH_SIZE        - Embedding batch size (default: 100)
     POSTGRES_HOST     - DB host (default: localhost)
     POSTGRES_PORT     - DB port (default: 5432)
@@ -23,15 +24,15 @@ import sys
 import logging
 from pathlib import Path
 
-# Load .env if present
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
 from typing import List, Dict, Any, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# Load .env from project root (for POSTGRES_* etc.)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(PROJECT_ROOT / ".env", override=True)
+except ImportError:
+    pass
 sys.path.insert(0, str(PROJECT_ROOT / "shared" / "python"))
 
 import psycopg2
@@ -45,6 +46,30 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_JSON = PROJECT_ROOT / "data-pipeline" / "scrapers" / "data" / "places_enriched.json"
 EMBEDDING_DIM = 384  # all-MiniLM-L6-v2
+
+
+def infer_location_slug(json_path: Path) -> str:
+    """Infer location slug from path, e.g. .../data/london/places_enriched.json -> london."""
+    parent = json_path.resolve().parent.name
+    if parent and parent not in ("data", "scrapers"):
+        return parent.lower().replace(" ", "_")
+    return "default"
+
+
+def get_or_create_location(conn, slug: str, name: str, region: str, country: str) -> int:
+    """Upsert location, return location_id."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO locations (slug, name, region, country)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (slug) DO UPDATE SET
+                name = EXCLUDED.name,
+                region = COALESCE(EXCLUDED.region, locations.region),
+                country = COALESCE(EXCLUDED.country, locations.country)
+            RETURNING id
+        """, (slug, name, region or "Unknown", country or "US"))
+        row = cur.fetchone()
+        return row[0] if row else None
 
 
 def get_db_config() -> dict:
@@ -164,7 +189,7 @@ def format_embedding_for_pgvector(embedding: List[float]) -> str:
     return "[" + ",".join(map(str, embedding)) + "]"
 
 
-def upsert_places(conn, places: List[Dict[str, Any]], model) -> int:
+def upsert_places(conn, places: List[Dict[str, Any]], model, location_id: int) -> int:
     """Upsert places with embeddings. Returns count of rows."""
     chain_keys, chain_desc_map, chain_cat_map = _compute_chain_keys(places)
     batch_size = int(os.getenv("BATCH_SIZE", "100"))
@@ -180,6 +205,7 @@ def upsert_places(conn, places: List[Dict[str, Any]], model) -> int:
             desc = p.get("embedding_desc") or p.get("description")
             rows.append((
                 p.get("place_id"),
+                location_id,
                 p.get("source"),
                 p.get("name", ""),
                 p.get("categories"),
@@ -197,6 +223,9 @@ def upsert_places(conn, places: List[Dict[str, Any]], model) -> int:
                 p.get("hours"),
                 desc,
                 format_embedding_for_pgvector(emb.tolist()),
+                p.get("popularity"),
+                p.get("image_url"),
+                p.get("wikipedia_extract"),
             ))
 
         with conn.cursor() as cur:
@@ -204,11 +233,13 @@ def upsert_places(conn, places: List[Dict[str, Any]], model) -> int:
                 cur,
                 """
                 INSERT INTO attractions (
-                    place_id, source, name, categories, category_id,
+                    place_id, location_id, source, name, categories, category_id,
                     latitude, longitude, address, city, region, country,
-                    telephone, url, type, budget, hours, description, embedding
+                    telephone, url, type, budget, hours, description, embedding,
+                    popularity, image_url, wikipedia_extract
                 ) VALUES %s
                 ON CONFLICT (place_id) DO UPDATE SET
+                    location_id = EXCLUDED.location_id,
                     source = EXCLUDED.source,
                     name = EXCLUDED.name,
                     categories = EXCLUDED.categories,
@@ -225,7 +256,10 @@ def upsert_places(conn, places: List[Dict[str, Any]], model) -> int:
                     budget = EXCLUDED.budget,
                     hours = EXCLUDED.hours,
                     description = EXCLUDED.description,
-                    embedding = EXCLUDED.embedding
+                    embedding = EXCLUDED.embedding,
+                    popularity = EXCLUDED.popularity,
+                    image_url = EXCLUDED.image_url,
+                    wikipedia_extract = EXCLUDED.wikipedia_extract
                 """,
                 rows,
             )
@@ -242,6 +276,9 @@ def main():
         logger.error(f"Places file not found: {json_path}")
         sys.exit(1)
 
+    location_slug = os.getenv("LOCATION_SLUG") or infer_location_slug(json_path)
+    logger.info(f"Location slug: {location_slug}")
+
     logger.info("Loading sentence-transformers model (all-MiniLM-L6-v2)...")
     from sentence_transformers import SentenceTransformer
     model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -251,11 +288,20 @@ def main():
         logger.error("No places to load.")
         sys.exit(1)
 
+    # Derive location name, region, country from first place
+    first = places[0]
+    loc_name = first.get("region") or first.get("city") or location_slug.replace("_", " ").title()
+    loc_region = first.get("region")
+    loc_country = first.get("country") or "US"
+
     config = get_db_config()
     logger.info(f"Connecting to {config['host']}:{config['port']}/{config['database']}")
 
     with psycopg2.connect(**config) as conn:
-        upsert_places(conn, places, model)
+        location_id = get_or_create_location(conn, location_slug, loc_name, loc_region, loc_country)
+        conn.commit()
+        logger.info(f"Location id={location_id} ({location_slug})")
+        upsert_places(conn, places, model, location_id)
 
     logger.info("Done.")
 
