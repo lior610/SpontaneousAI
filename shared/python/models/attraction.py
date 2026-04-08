@@ -27,6 +27,9 @@ class AttractionBase(BaseModel):
     description: Optional[str] = None  # text description used to generate embedding
     embedding: Optional[List[float]] = None  # vector embedding for pgvector similarity search
     location_id: Optional[int] = None  # FK to locations
+    popularity: Optional[float] = None  # OpenTripMap normalized (3→1, 2→0.7, 1→0.4, no match→0.2)
+    image_url: Optional[str] = None  # from OpenTripMap
+    wikipedia_extract: Optional[str] = None  # from OpenTripMap wikipedia_extracts.text
     location_cluster_id: Optional[int] = None  # FK to location_clusters (HDBSCAN cluster per location)
     distance: Optional[float] = None  # Distance to the user request
 

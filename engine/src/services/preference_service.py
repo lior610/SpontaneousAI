@@ -18,6 +18,7 @@ Usage:
     pref_vec = await composer.build(user_id=1, trip_id=42)
     # → np.ndarray shape (384,)
 """
+import os
 import sys
 import asyncio
 import logging
@@ -43,16 +44,24 @@ from src.db.feedback_queries import get_liked_place_ids, get_attraction_embeddin
 
 logger = logging.getLogger(__name__)
 
+
+def _env_float(key: str, default: float) -> float:
+    raw = os.getenv(key)
+    if raw is None or not raw.strip():
+        return default
+    return float(raw)
+
+
 # ---------------------------------------------------------------------------
-# Source weights (must sum to 1.0)
+# Source weights: tune HISTORICAL + TRIP_SETUP; REALTIME fills the remainder (sums to 1.0)
 # ---------------------------------------------------------------------------
 WEIGHT_HISTORICAL: float = 0.2
 WEIGHT_TRIP_SETUP: float = 0.5
-WEIGHT_REALTIME:   float = 0.3
+WEIGHT_REALTIME: float = 1.0 - (WEIGHT_HISTORICAL + WEIGHT_TRIP_SETUP)
 
-# Within the trip-setup vector: category breakdown vs qualifier text
-WEIGHT_CATEGORIES: float = 0.80
-WEIGHT_QUALIFIERS: float = 0.20
+# Within the trip-setup vector: category breakdown vs qualifier text (should sum to 1.0)
+WEIGHT_CATEGORIES: float = _env_float("PREF_WEIGHT_TRIP_SETUP_CATEGORIES", 0.80)
+WEIGHT_QUALIFIERS: float = _env_float("PREF_WEIGHT_TRIP_SETUP_QUALIFIERS", 0.20)
 
 # EMA alpha for real-time updates: higher = new feedback has more influence
 EMA_ALPHA: float = float(os.getenv("EMA_ALPHA", "0.3"))

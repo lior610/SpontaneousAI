@@ -52,6 +52,10 @@ CREATE TABLE IF NOT EXISTS attractions (
     description TEXT,
     embedding vector(384),
     location_cluster_id INTEGER REFERENCES location_clusters(id) ON DELETE SET NULL,
+    -- OpenTripMap enrichment (popularity 3→1, 2→0.7, 1→0.4, no match→0.2)
+    popularity NUMERIC(4, 3) CHECK (popularity >= 0 AND popularity <= 1),
+    image_url TEXT,
+    wikipedia_extract TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
