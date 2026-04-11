@@ -7,6 +7,18 @@ import axios from 'axios';
 
 // In-memory cache to hold arrays of recommendations returned by the Engine
 const tripRecommendationsCache = new Map();
+const CACHE_TTL_MS = parseInt(process.env.RECOMMENDATION_CACHE_TTL_MS, 10) || 30 * 60 * 1000; // 30 minutes
+
+// Periodic sweep: evict cache entries older than 2× TTL (abandoned sessions)
+setInterval(() => {
+  const now = Date.now();
+  const evictionThreshold = CACHE_TTL_MS * 2;
+  for (const [tripId, entry] of tripRecommendationsCache) {
+    if (now - entry.fetchedAt > evictionThreshold) {
+      tripRecommendationsCache.delete(tripId);
+    }
+  }
+}, CACHE_TTL_MS).unref();
 
 export const getTrips = async (req, res) => {
   try {
@@ -795,6 +807,10 @@ export const completeTripActivity = async (req, res) => {
       await usersDb.query(`UPDATE trips SET current_lat = $1, current_lng = $2 WHERE trip_id = $3`, [lat, lng, tripId]);
     }
 
+    // Invalidate the recommendation cache so the next getNextActivity fetches a
+    // fresh batch — the user's location, time, and preferences (EMA) have changed.
+    tripRecommendationsCache.delete(tripId);
+
     res.status(201).json({
       message: 'Activity completion saved',
       activity_log: {
@@ -930,8 +946,16 @@ export const getNextActivity = async (req, res) => {
 
     // Standard cached recommendation flow
     let cached = tripRecommendationsCache.get(tripId);
+    const cacheExpired = cached && (Date.now() - cached.fetchedAt > CACHE_TTL_MS);
+    if (cacheExpired) {
+      console.log(`[API] Cache expired for trip ${tripId} (age: ${Math.round((Date.now() - cached.fetchedAt) / 1000)}s), refreshing...`);
+      tripRecommendationsCache.delete(tripId);
+      cached = null;
+    }
+    let freshBatch = false;
     if (!cached || cached.currentIndex >= cached.results.length) {
-      console.log(`[API] Cache empty for trip ${tripId}, fetching from engine...`);
+      freshBatch = true;
+      console.log(`[API] Cache ${!cached ? 'empty' : 'exhausted'} for trip ${tripId}, fetching from engine...`);
       try {
         const recRes = await axios.post(`http://${engineHost}:8000/recommendations/`, {
           user_id: trip.user_id,
@@ -940,7 +964,7 @@ export const getNextActivity = async (req, res) => {
           current_time: new Date().toISOString()
         });
         const data = recRes.data;
-        tripRecommendationsCache.set(tripId, { results: data, currentIndex: 0 });
+        tripRecommendationsCache.set(tripId, { results: data, currentIndex: 0, fetchedAt: Date.now() });
         cached = tripRecommendationsCache.get(tripId);
       } catch (err) {
         console.error("Recommendations fetch failed:", err.message);
@@ -953,8 +977,9 @@ export const getNextActivity = async (req, res) => {
     }
 
     const nextRec = cached.results[cached.currentIndex];
-    cached.currentIndex++; // increment
+    cached.currentIndex++;
     const attr = nextRec.attraction;
+    const cacheAgeSeconds = Math.round((Date.now() - cached.fetchedAt) / 1000);
     
     res.json({
       activity: {
@@ -971,6 +996,13 @@ export const getNextActivity = async (req, res) => {
         lat: attr.latitude,
         lng: attr.longitude,
         completed: false
+      },
+      _debug: {
+        source: freshBatch || cacheExpired ? 'fresh_batch' : 'cached_batch',
+        batchIndex: cached.currentIndex,
+        batchSize: cached.results.length,
+        cacheAgeSeconds,
+        reason: cacheExpired ? 'ttl_expired' : freshBatch ? 'new_or_exhausted' : 'from_cache'
       }
     });
 
