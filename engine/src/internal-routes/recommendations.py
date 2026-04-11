@@ -4,6 +4,10 @@ Recommendations Router - API endpoints for receiving recommendations and posting
 import logging
 from typing import List
 from fastapi import APIRouter, HTTPException, Depends
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 
 from models.recommendation import RecommendationRequest, RecommendationResponse, RecommendationFeedback
 from src.services.preference_service import PreferenceComposer
@@ -41,6 +45,8 @@ async def get_recommendations(req: RecommendationRequest):
         
         user_lat = req.current_location.get('lat') if req.current_location else None
         user_lng = req.current_location.get('lng') if req.current_location else None
+        
+        # We start with UTC hour, but will adjust below based on destination timezone
         current_hour = req.current_time.hour if req.current_time else None
             
         try:
@@ -70,12 +76,22 @@ async def get_recommendations(req: RecommendationRequest):
                 
             with get_attr_conn() as attr_conn:
                 cursor = attr_conn.cursor()
-                cursor.execute("SELECT id FROM locations WHERE LOWER(name) = LOWER(%s)", (dest,))
+                cursor.execute("SELECT id, timezone FROM locations WHERE LOWER(name) = LOWER(%s)", (dest,))
                 row = cursor.fetchone()
                 cursor.close()
                 if not row:
                     raise HTTPException(status_code=500, detail=f"Destination '{dest}' not found in locations table.")
                 db_location_id = row[0]
+                db_timezone = row[1]
+                
+            # 2.5 Adjust current_hour to destination's local time
+            if db_timezone and req.current_time:
+                try:
+                    local_time = req.current_time.astimezone(ZoneInfo(db_timezone))
+                    current_hour = local_time.hour
+                    logger.info(f"Timezone adjusted: UTC {req.current_time.hour}:00 -> {db_timezone} {current_hour}:00")
+                except Exception as tz_err:
+                    logger.warning(f"Failed to adjust timezone for {db_timezone}: {tz_err}")
             
         except HTTPException:
             raise
