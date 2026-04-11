@@ -291,6 +291,9 @@ export const updateTrip = async (req, res) => {
       start_date, 
       end_date, 
       budget,
+      preference_breakdown,
+      max_walking_distance,
+      preferred_transportation,
       max_travel_time_min,
       with_kids,
       current_lat,
@@ -373,6 +376,59 @@ export const updateTrip = async (req, res) => {
       } else {
         updates.push(`budget = $${paramIndex}`);
         values.push(null);
+      }
+      paramIndex++;
+    }
+
+    if (preference_breakdown !== undefined) {
+      if (preference_breakdown === null) {
+        updates.push(`preference_breakdown = $${paramIndex}`);
+        values.push(null);
+      } else if (
+        typeof preference_breakdown === 'object' &&
+        preference_breakdown !== null &&
+        !Array.isArray(preference_breakdown)
+      ) {
+        updates.push(`preference_breakdown = $${paramIndex}`);
+        values.push(JSON.stringify(preference_breakdown));
+      } else {
+        return res.status(400).json({
+          error: 'preference_breakdown must be an object of category -> percentage or null'
+        });
+      }
+      paramIndex++;
+    }
+
+    if (max_walking_distance !== undefined) {
+      if (max_walking_distance !== null) {
+        const val = parseFloat(max_walking_distance);
+        if (isNaN(val) || val < 0) {
+          return res.status(400).json({
+            error: 'max_walking_distance must be a non-negative number (km) or null'
+          });
+        }
+        updates.push(`max_walking_distance = $${paramIndex}`);
+        values.push(val);
+      } else {
+        updates.push(`max_walking_distance = $${paramIndex}`);
+        values.push(null);
+      }
+      paramIndex++;
+    }
+
+    if (preferred_transportation !== undefined) {
+      if (preferred_transportation === null || preferred_transportation === '') {
+        updates.push(`preferred_transportation = $${paramIndex}`);
+        values.push(null);
+      } else {
+        const validTransport = ['walking', 'public', 'taxi'];
+        if (!validTransport.includes(preferred_transportation)) {
+          return res.status(400).json({
+            error: `preferred_transportation must be one of: ${validTransport.join(', ')}`
+          });
+        }
+        updates.push(`preferred_transportation = $${paramIndex}`);
+        values.push(preferred_transportation);
       }
       paramIndex++;
     }
@@ -481,7 +537,7 @@ export const updateTrip = async (req, res) => {
     // Check if any fields to update
     if (updates.length === 0) {
       return res.status(400).json({ 
-        error: 'No fields provided to update. Provide at least one of: destination, start_date, end_date, budget' 
+        error: 'No fields provided to update. Provide at least one updatable trip field.'
       });
     }
 
@@ -558,6 +614,7 @@ export const updateTrip = async (req, res) => {
       SET ${updates.join(', ')} 
       WHERE trip_id = $${paramIndex}
       RETURNING trip_id, user_id, destination, start_date, end_date, budget,
+        preference_breakdown, max_walking_distance, preferred_transportation,
         max_travel_time_min, with_kids,
         current_lat, current_lng, timezone,
         local_hour_last_seen, day_of_week_last_seen,
@@ -577,6 +634,9 @@ export const updateTrip = async (req, res) => {
         start_date: updatedTrip.start_date,
         end_date: updatedTrip.end_date,
         budget: updatedTrip.budget ? parseFloat(updatedTrip.budget) : null,
+        preference_breakdown: updatedTrip.preference_breakdown,
+        max_walking_distance: updatedTrip.max_walking_distance != null ? parseFloat(updatedTrip.max_walking_distance) : null,
+        preferred_transportation: updatedTrip.preferred_transportation,
         max_travel_time_min: updatedTrip.max_travel_time_min,
         with_kids: updatedTrip.with_kids,
         current_lat: updatedTrip.current_lat ? parseFloat(updatedTrip.current_lat) : null,

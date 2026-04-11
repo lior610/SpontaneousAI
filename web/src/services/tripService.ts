@@ -76,7 +76,7 @@ export async function fetchTripSetup(): Promise<TripSetup> {
   return { ...defaultTripSetup };
 }
 
-export async function saveTripSetup(setup: TripSetup): Promise<SaveTripResult> {
+export async function saveTripSetup(setup: TripSetup, editTripId?: number | null): Promise<SaveTripResult> {
   const userId = getCurrentUserId();
   if (!setup.startDate || !setup.endDate || !setup.destination) {
     throw new Error('startDate, endDate, and destination are required to save a trip');
@@ -85,7 +85,7 @@ export async function saveTripSetup(setup: TripSetup): Promise<SaveTripResult> {
   // 1) Persist user preferences to users table (skipped if user not found, e.g. 404)
   await updateUserPreferences(setup);
 
-  // 2) Create trip
+  // 2) Create or update trip
   const budget =
     setup.preferences.budget != null
       ? Math.round((setup.preferences.budget / 100) * 5000)
@@ -102,8 +102,12 @@ export async function saveTripSetup(setup: TripSetup): Promise<SaveTripResult> {
     preferred_transportation: setup.constraints.transportType,
   };
 
-  const res = await fetch(`${API_BASE}/api/trips`, {
-    method: 'POST',
+  const isEditing = typeof editTripId === 'number' && Number.isFinite(editTripId) && editTripId > 0;
+  const endpoint = isEditing ? `${API_BASE}/api/trips/${editTripId}` : `${API_BASE}/api/trips`;
+  const method = isEditing ? 'PUT' : 'POST';
+
+  const res = await fetch(endpoint, {
+    method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(tripBody),
   });
@@ -125,13 +129,11 @@ export async function saveTripSetup(setup: TripSetup): Promise<SaveTripResult> {
     if (res.status === 409 && parsedError) {
       throw new Error(parsedError);
     }
-    throw new Error(
-      `Failed to save trip (status ${res.status}): ${parsedError || errorText || res.statusText}`,
-    );
+    throw new Error(`Failed to save trip (status ${res.status}): ${parsedError || errorText || res.statusText}`);
   }
 
   const data = await res.json();
-  const tripId = data.trip?.trip_id ?? data.trip_id;
+  const tripId = data.trip?.trip_id ?? data.trip_id ?? (isEditing ? editTripId : null);
   if (typeof tripId !== 'number') {
     throw new Error('Server did not return a trip id');
   }
