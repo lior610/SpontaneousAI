@@ -31,6 +31,7 @@ class AttractionBase(BaseModel):
     image_url: Optional[str] = None  # from OpenTripMap
     wikipedia_extract: Optional[str] = None  # from OpenTripMap wikipedia_extracts.text
     location_cluster_id: Optional[int] = None  # FK to location_clusters (HDBSCAN cluster per location)
+    distance: Optional[float] = None  # Distance to the user request
 
 
 class AttractionCreate(AttractionBase):

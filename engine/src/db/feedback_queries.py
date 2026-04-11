@@ -151,6 +151,47 @@ def record_feedback(
 # Helpers
 # ---------------------------------------------------------------------------
 
+def get_attraction_categories(
+    attractions_conn, place_ids: List[str]
+) -> Set[str]:
+    """
+    Fetch all unique categories for a given list of place_ids.
+    Used to seed the 'real_seen_categories' set for the diversity score.
+    
+    Args:
+        attractions_conn: psycopg2 connection to the attractions DB
+        place_ids: list of place_id strings
+        
+    Returns:
+        Set of unique string categories and types
+    """
+    if not place_ids:
+        return set()
+
+    cursor = attractions_conn.cursor()
+    cursor.execute(
+        """
+        SELECT categories, type
+        FROM attractions
+        WHERE place_id = ANY(%s)
+        """,
+        (place_ids,)
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+
+    seen_cats = set()
+    for row in rows:
+        cats = row[0] or []
+        typ = row[1]
+        for c in cats:
+            if c:
+                seen_cats.add(c)
+        if typ:
+            seen_cats.add(typ)
+    return seen_cats
+
+
 def _parse_embedding(emb) -> np.ndarray:
     """Convert a DB embedding value (list, string, or array) to float32 ndarray."""
     if isinstance(emb, np.ndarray):

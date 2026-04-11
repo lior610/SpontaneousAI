@@ -23,6 +23,7 @@ import sys
 import asyncio
 import logging
 from pathlib import Path
+import os
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -63,7 +64,7 @@ WEIGHT_CATEGORIES: float = _env_float("PREF_WEIGHT_TRIP_SETUP_CATEGORIES", 0.80)
 WEIGHT_QUALIFIERS: float = _env_float("PREF_WEIGHT_TRIP_SETUP_QUALIFIERS", 0.20)
 
 # EMA alpha for real-time updates: higher = new feedback has more influence
-EMA_ALPHA: float = 0.3
+EMA_ALPHA: float = float(os.getenv("EMA_ALPHA", "0.3"))
 
 # Descriptive phrases embedded for each preference_breakdown category key.
 # Chosen to be semantically rich so all-MiniLM-L6-v2 places them near
