@@ -8,6 +8,16 @@ import axios from 'axios';
 // In-memory cache to hold arrays of recommendations returned by the Engine
 const tripRecommendationsCache = new Map();
 
+/** Helper to extract YYYY-MM-DD from a string without timezone shift (takes first 10 chars if it looks like a date). */
+const normalizeDateStr = (input) => {
+  if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}/.test(input)) {
+    return input.substring(0, 10);
+  }
+  const date = new Date(input);
+  if (isNaN(date.getTime())) return null;
+  return date.toISOString().split('T')[0];
+};
+
 export const getTrips = async (req, res) => {
   try {
     const { user_id: queryUserId } = req.query;
@@ -215,8 +225,8 @@ export const createTrip = async (req, res) => {
 
     const withKidsValue = with_kids !== undefined ? (with_kids !== null ? Boolean(with_kids) : null) : null;
 
-    const startDateStr = start.toISOString().split('T')[0];
-    const endDateStr = end.toISOString().split('T')[0];
+    const startDateStr = normalizeDateStr(start_date);
+    const endDateStr = normalizeDateStr(end_date);
 
     // Restriction: a user cannot have overlapping trips in time
     const overlapCheck = await usersDb.query(
@@ -351,7 +361,7 @@ export const updateTrip = async (req, res) => {
         });
       }
       updates.push(`start_date = $${paramIndex}`);
-      values.push(start.toISOString().split('T')[0]);
+      values.push(normalizeDateStr(start_date));
       paramIndex++;
     }
 
@@ -363,7 +373,7 @@ export const updateTrip = async (req, res) => {
         });
       }
       updates.push(`end_date = $${paramIndex}`);
-      values.push(end.toISOString().split('T')[0]);
+      values.push(normalizeDateStr(end_date));
       paramIndex++;
     }
 
