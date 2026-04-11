@@ -33,11 +33,22 @@ const transportOptions = [
 export default function WizardPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const flowState = (location.state as { editTripId?: number } | null) ?? {};
-  const editTripId = flowState.editTripId;
-  const [tripSetup, setTripSetup] = useState<TripSetup>({ ...defaultTripSetup });
+  const flowState = (location.state as { editTripId?: number | string; tripSetup?: TripSetup } | null) ?? {};
+  const parsedEditTripId = Number(flowState.editTripId);
+  const editTripId = Number.isFinite(parsedEditTripId) && parsedEditTripId > 0 ? parsedEditTripId : null;
+
+  const initialTripSetup: TripSetup = flowState.tripSetup
+    ? {
+        ...defaultTripSetup,
+        ...flowState.tripSetup,
+        preferences: { ...defaultTripSetup.preferences, ...flowState.tripSetup.preferences },
+        constraints: { ...defaultTripSetup.constraints, ...flowState.tripSetup.constraints },
+      }
+    : { ...defaultTripSetup };
+
+  const [tripSetup, setTripSetup] = useState<TripSetup>(initialTripSetup);
   const [wizardStep, setWizardStep] = useState(1);
-  const [localDestination, setLocalDestination] = useState(tripSetup.destination);
+  const [localDestination, setLocalDestination] = useState(initialTripSetup.destination);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dateConflictError, setDateConflictError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -84,7 +95,7 @@ export default function WizardPage() {
     const trips = Array.isArray(data.trips) ? data.trips : [];
 
     for (const trip of trips) {
-      if (editTripId && trip.trip_id === editTripId) continue;
+      if (editTripId !== null && Number(trip.trip_id) === editTripId) continue;
       const existingStart = new Date(`${String(trip.start_date).slice(0, 10)}T00:00:00`);
       const existingEnd = new Date(`${String(trip.end_date).slice(0, 10)}T00:00:00`);
       const overlaps = existingStart <= endDate && existingEnd >= startDate;
@@ -120,7 +131,7 @@ export default function WizardPage() {
       setSaveError(null);
       setIsSaving(true);
       try {
-        const { tripId } = await saveTripSetup(finalSetup);
+        const { tripId } = await saveTripSetup(finalSetup, editTripId);
         navigate('/trip', { state: { tripSetup: finalSetup, tripId } });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to save trip';
