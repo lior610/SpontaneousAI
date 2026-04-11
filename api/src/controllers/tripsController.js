@@ -3,6 +3,10 @@
  */
 
 import * as usersDb from '../db/usersConnection.js';
+import axios from 'axios';
+
+// In-memory cache to hold arrays of recommendations returned by the Engine
+const tripRecommendationsCache = new Map();
 
 export const getTrips = async (req, res) => {
   try {
@@ -712,6 +716,9 @@ export const completeTripActivity = async (req, res) => {
       review_count,
       feedback,
       completed_at,
+      place_id,
+      lat,
+      lng
     } = req.body ?? {};
 
     if (!title || typeof title !== 'string') {
@@ -759,6 +766,35 @@ export const completeTripActivity = async (req, res) => {
     );
 
     const row = result.rows[0];
+
+    // Engine Feedback & Coordinations update logic
+    if (place_id) {
+      const tripRow = await usersDb.query('SELECT user_id FROM trips WHERE trip_id = $1', [tripId]);
+      const userId = tripRow.rows[0]?.user_id;
+
+      if (userId) {
+        let action = 'visited';
+        if (feedback) {
+          if (feedback.liked === true) action = 'liked';
+          else if (feedback.liked === false) action = 'skipped';
+        }
+
+        try {
+          const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
+          const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
+          await axios.post(`http://${engineHost}:8000/recommendations/feedback`, {
+            user_id: userId, trip_id: tripId, place_id, action
+          });
+        } catch (err) {
+          console.error("Engine feedback forward err:", err.message);
+        }
+      }
+    }
+
+    if (lat != null && lng != null) {
+      await usersDb.query(`UPDATE trips SET current_lat = $1, current_lng = $2 WHERE trip_id = $3`, [lat, lng, tripId]);
+    }
+
     res.status(201).json({
       message: 'Activity completion saved',
       activity_log: {
@@ -826,6 +862,148 @@ export const getTripActivities = async (req, res) => {
     res.json({ activities });
   } catch (error) {
     console.error('Error fetching trip activity logs:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getNextActivity = async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.id, 10);
+    if (isNaN(tripId) || tripId <= 0) return res.status(400).json({ error: 'Invalid trip ID' });
+
+    const tripCheck = await usersDb.query('SELECT * FROM trips WHERE trip_id = $1', [tripId]);
+    if (tripCheck.rowCount === 0) return res.status(404).json({ error: 'Trip not found' });
+    const trip = tripCheck.rows[0];
+
+    // Determine coords
+    let current_lat = trip.current_lat != null ? parseFloat(trip.current_lat) : null;
+    let current_lng = trip.current_lng != null ? parseFloat(trip.current_lng) : null;
+    if (current_lat === null || current_lng === null) {
+      if (trip.destination && trip.destination.toLowerCase() === 'new york') {
+        current_lat = 40.7580; current_lng = -73.9855;
+      } else {
+        current_lat = 51.5237; current_lng = -0.1585;
+      }
+    }
+
+    const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
+    const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
+
+    // Handle specific Utility Needs bypassing cache
+    const specificNeed = req.query.specific_need;
+    if (specificNeed) {
+      try {
+        const utilRes = await axios.post(`http://${engineHost}:8000/utilities/closest`, {
+          parent_category: specificNeed,
+          lat: current_lat,
+          lng: current_lng,
+          location_id: 1, // Engine gracefully maps or ignores if lat/lng are ok
+          current_hour: new Date().getHours(),
+          limit: 1
+        });
+        
+        const utilList = utilRes.data;
+        if (utilList && utilList.length > 0) {
+          const attr = utilList[0];
+          return res.json({
+            activity: {
+              id: attr.place_id || attr.activity_id || 'util-1',
+              title: attr.name,
+              description: attr.description || `A nearby location matching your immediate need for ${specificNeed}.`,
+              image: '',
+              rating: null,
+              reviewCount: null,
+              estimatedTime: attr.hours || '1 hour',
+              cost: attr.budget ? `$${attr.budget}` : '$$',
+              category: attr.categories && attr.categories.length > 0 ? attr.categories[0].toLowerCase() : 'general',
+              address: attr.address,
+              lat: attr.latitude,
+              lng: attr.longitude,
+              completed: false
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Utility fetch failed:", err.message);
+      }
+    }
+
+    // Standard cached recommendation flow
+    let cached = tripRecommendationsCache.get(tripId);
+    if (!cached || cached.currentIndex >= cached.results.length) {
+      console.log(`[API] Cache empty for trip ${tripId}, fetching from engine...`);
+      try {
+        const recRes = await axios.post(`http://${engineHost}:8000/recommendations/`, {
+          user_id: trip.user_id,
+          trip_id: tripId,
+          current_location: { lat: current_lat, lng: current_lng },
+          current_time: new Date().toISOString()
+        });
+        const data = recRes.data;
+        tripRecommendationsCache.set(tripId, { results: data, currentIndex: 0 });
+        cached = tripRecommendationsCache.get(tripId);
+      } catch (err) {
+        console.error("Recommendations fetch failed:", err.message);
+        return res.status(500).json({ error: 'Failed to fetch recommendations from engine' });
+      }
+    }
+
+    if (!cached || !cached.results || cached.results.length === 0) {
+       return res.status(404).json({ error: 'No recommendations available right now.' });
+    }
+
+    const nextRec = cached.results[cached.currentIndex];
+    cached.currentIndex++; // increment
+    const attr = nextRec.attraction;
+    
+    res.json({
+      activity: {
+        id: attr.place_id || attr.activity_id,
+        title: attr.name,
+        description: attr.description,
+        image: '',
+        rating: null,
+        reviewCount: null,
+        estimatedTime: attr.hours || '1-2 hours',
+        cost: attr.budget && attr.budget !== '0' ? `$${attr.budget}` : 'Free',
+        category: attr.categories && attr.categories.length > 0 ? attr.categories[0].toLowerCase() : 'general',
+        address: attr.address,
+        lat: attr.latitude,
+        lng: attr.longitude,
+        completed: false
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching next activity:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const skipTripActivity = async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.id, 10);
+    const { place_id } = req.body;
+    
+    if (!place_id) return res.status(400).json({ error: 'place_id is required' });
+
+    const tripCheck = await usersDb.query('SELECT user_id FROM trips WHERE trip_id = $1', [tripId]);
+    if (tripCheck.rowCount === 0) return res.status(404).json({ error: 'Trip not found' });
+    const userId = tripCheck.rows[0].user_id;
+
+    const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
+    const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
+    
+    try {
+      await axios.post(`http://${engineHost}:8000/recommendations/feedback`, {
+        user_id: userId, trip_id: tripId, place_id, action: 'skipped'
+      });
+    } catch(err) {
+      console.error("Error sending skip feedback to engine:", err.message);
+    }
+
+    res.json({ message: 'Activity skipped' });
+  } catch(error) {
     res.status(500).json({ error: error.message });
   }
 };

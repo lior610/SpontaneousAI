@@ -7,7 +7,7 @@ import { FeedbackPopup } from '@/components/FeedbackPopup';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import { Activity, TripSetup, defaultTripSetup } from '@/types/trip';
-import { fetchNextActivity, completeActivity } from '@/services/tripService';
+import { fetchNextActivity, completeActivity, skipActivity } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
 
 export function TripPage() {
@@ -27,12 +27,14 @@ export function TripPage() {
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
-      const activity = await fetchNextActivity();
+      const activity = await fetchNextActivity(tripId);
       setCurrentActivity(activity);
       setIsLoading(false);
     };
-    load();
-  }, []);
+    if (tripId) {
+      load();
+    }
+  }, [tripId]);
 
   const handleActivityComplete = () => {
     setShowFeedback(true);
@@ -49,11 +51,11 @@ export function TripPage() {
       setCompletedActivities(prev => [...prev, { ...currentActivity, completed: true, feedback }]);
     }
     setShowFeedback(false);
-    setCurrentActivity(null);
 
-    if (needSpecific) {
-      // TODO: handle finding nearby specific need
-    }
+    setIsLoading(true);
+    const nextActivity = await fetchNextActivity(tripId, needSpecific);
+    setCurrentActivity(nextActivity);
+    setIsLoading(false);
   };
 
   const handleLogout = () => {
@@ -165,10 +167,17 @@ export function TripPage() {
           <div className="mt-6 text-center">
             <button
               onClick={async () => {
-                setIsLoading(true);
-                const activity = await fetchNextActivity();
-                setCurrentActivity(activity);
-                setIsLoading(false);
+                if (tripId && currentActivity) {
+                  setIsLoading(true);
+                  try {
+                    await skipActivity(tripId, currentActivity.id);
+                  } catch (e) {
+                    console.error('Failed to skip activity:', e);
+                  }
+                  const activity = await fetchNextActivity(tripId);
+                  setCurrentActivity(activity);
+                  setIsLoading(false);
+                }
               }}
               className="inline-flex items-center gap-2 h-9 px-4 rounded-md text-sm font-semibold text-foreground hover:bg-muted transition-all duration-300"
             >

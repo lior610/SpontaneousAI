@@ -91,7 +91,7 @@ export function LandingPage() {
     };
 
     void loadActiveTrip();
-  }, [currentUser]);
+  }, [currentUser?.id]);
 
   const handleStartTrip = () => {
     if (!currentUser) {
