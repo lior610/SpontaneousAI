@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Settings, MapPin, RefreshCw, LogOut, Home, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -23,17 +23,18 @@ export function TripPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const initialLoadDone = useRef(false);
 
   useEffect(() => {
+    if (!tripId || initialLoadDone.current) return;
+    initialLoadDone.current = true;
     const load = async () => {
       setIsLoading(true);
       const activity = await fetchNextActivity(tripId);
       setCurrentActivity(activity);
       setIsLoading(false);
     };
-    if (tripId) {
-      load();
-    }
+    load();
   }, [tripId]);
 
   const handleActivityComplete = () => {
