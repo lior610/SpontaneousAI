@@ -9,7 +9,15 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, Generator
 
-_env_file = Path(__file__).resolve().parents[3] / ".env"
+_env_file = None
+_current_dir = Path(__file__).resolve().parent
+while _current_dir != _current_dir.parent:
+    if (_current_dir / ".env").exists():
+        _env_file = _current_dir / ".env"
+        break
+    _current_dir = _current_dir.parent
+if not _env_file:
+    _env_file = Path(".env")
 try:
     from dotenv import load_dotenv
 

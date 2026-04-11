@@ -42,6 +42,8 @@ export default function WizardPage() {
   const [dateConflictError, setDateConflictError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isCheckingDates, setIsCheckingDates] = useState(false);
+  const [locations, setLocations] = useState<{ id: string, name: string, region: string, country: string }[]>([]);
+  const [isLoadingLocations, setIsLoadingLocations] = useState(false);
 
   // Require login: redirect to login if not authenticated
   const user = getCurrentUser();
@@ -49,7 +51,7 @@ export default function WizardPage() {
     if (!user) {
       navigate('/login', { replace: true });
     }
-  }, [navigate, user]);
+  }, [navigate, user?.id]);
 
   const startDateRef = useRef<HTMLInputElement>(null);
   const endDateRef = useRef<HTMLInputElement>(null);
@@ -58,6 +60,19 @@ export default function WizardPage() {
   if (!user) {
     return null;
   }
+
+  useEffect(() => {
+    if (user && wizardStep === 1 && locations.length === 0) {
+      setIsLoadingLocations(true);
+      import('@/services/tripService').then(m => m.fetchLocations()).then(res => {
+        setLocations(res);
+        if (res.length > 0 && !localDestination) {
+          setLocalDestination(res[0].name);
+        }
+        setIsLoadingLocations(false);
+      }).catch(() => setIsLoadingLocations(false));
+    }
+  }, [user?.id, wizardStep, locations.length, localDestination]);
 
   const updatePreferences = (update: Partial<TripPreferences>) => {
     setTripSetup(prev => ({
@@ -195,13 +210,20 @@ export default function WizardPage() {
                 </h3>
               </div>
               <div className="p-5 pt-0">
-                <input
-                  type="text"
-                  placeholder="e.g., Tokyo, Japan"
+                <select
                   value={localDestination}
                   onChange={(e) => setLocalDestination(e.target.value)}
-                  className="flex h-12 w-full rounded-xl border-2 border-input bg-card px-4 py-2 text-base placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:border-primary transition-all duration-200"
-                />
+                  disabled={isLoadingLocations}
+                  className="flex h-12 w-full rounded-xl border-2 border-input bg-card px-4 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:border-primary transition-all duration-200"
+                >
+                  <option value="" disabled>Select a destination</option>
+                  {locations.map(loc => (
+                    <option key={loc.id} value={loc.name}>
+                      {loc.name}, {loc.country}
+                    </option>
+                  ))}
+                </select>
+                {isLoadingLocations && <p className="text-xs text-muted-foreground mt-2 animate-pulse">Loading destinations...</p>}
               </div>
             </div>
 

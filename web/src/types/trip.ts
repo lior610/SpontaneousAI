@@ -42,6 +42,8 @@ export interface Activity {
   category: 'food' | 'nature' | 'culture' | 'nightlife' | 'general';
   address: string;
   completed: boolean;
+  lat?: number;
+  lng?: number;
   feedback?: {
     liked?: boolean;
     tooLong?: boolean;
