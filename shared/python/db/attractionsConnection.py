@@ -6,7 +6,26 @@ import psycopg2
 import psycopg2.pool
 import os
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Optional, Generator
+
+_env_file = Path(__file__).resolve().parents[3] / ".env"
+try:
+    from dotenv import load_dotenv
+
+    if _env_file.exists():
+        load_dotenv(_env_file, override=True)
+except ImportError:
+    if _env_file.exists():
+        import warnings
+
+        warnings.warn(
+            "python-dotenv is not installed; .env will not be loaded and "
+            "POSTGRES_* defaults (e.g. host 'db') will be used. "
+            "Install: pip install python-dotenv",
+            RuntimeWarning,
+            stacklevel=1,
+        )
 
 # Connection pool configuration
 _pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
