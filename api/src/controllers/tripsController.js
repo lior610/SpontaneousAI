@@ -214,6 +214,23 @@ export const createTrip = async (req, res) => {
     const startDateStr = start.toISOString().split('T')[0];
     const endDateStr = end.toISOString().split('T')[0];
 
+    // Restriction: a user cannot have overlapping trips in time
+    const overlapCheck = await usersDb.query(
+      `SELECT trip_id, destination, start_date, end_date
+       FROM trips
+       WHERE user_id = $1
+         AND NOT (end_date < $2::date OR start_date > $3::date)
+       ORDER BY start_date
+       LIMIT 1`,
+      [userId, startDateStr, endDateStr]
+    );
+    if (overlapCheck.rows.length > 0) {
+      const conflict = overlapCheck.rows[0];
+      return res.status(409).json({
+        error: `Trip dates overlap with an existing trip (${conflict.destination}: ${conflict.start_date.toISOString().split('T')[0]} to ${conflict.end_date.toISOString().split('T')[0]}). You can only have one trip at a time.`,
+      });
+    }
+
     const result = await usersDb.query(
       `INSERT INTO trips (
         user_id, destination, start_date, end_date, budget, preference_breakdown,
@@ -469,6 +486,8 @@ export const updateTrip = async (req, res) => {
     }
 
     // If both dates are being updated, validate the range
+    let finalStartDate;
+    let finalEndDate;
     if (start_date !== undefined && end_date !== undefined) {
       const start = new Date(start_date);
       const end = new Date(end_date);
@@ -477,10 +496,12 @@ export const updateTrip = async (req, res) => {
           error: 'end_date must be greater than or equal to start_date' 
         });
       }
+      finalStartDate = start.toISOString().split('T')[0];
+      finalEndDate = end.toISOString().split('T')[0];
     } else if (start_date !== undefined || end_date !== undefined) {
       // If only one date is being updated, fetch the other from database
       const currentTrip = await usersDb.query(
-        'SELECT start_date, end_date FROM trips WHERE trip_id = $1',
+        'SELECT user_id, start_date, end_date FROM trips WHERE trip_id = $1',
         [tripId]
       );
       
@@ -494,6 +515,33 @@ export const updateTrip = async (req, res) => {
       if (currentEnd < currentStart) {
         return res.status(400).json({ 
           error: 'end_date must be greater than or equal to start_date' 
+        });
+      }
+      finalStartDate = currentStart.toISOString().split('T')[0];
+      finalEndDate = currentEnd.toISOString().split('T')[0];
+    }
+
+    // Restriction: a user cannot have overlapping trips in time
+    if (finalStartDate && finalEndDate) {
+      const currentTrip = await usersDb.query(
+        'SELECT user_id FROM trips WHERE trip_id = $1',
+        [tripId]
+      );
+      const currentUserId = currentTrip.rows[0]?.user_id;
+      const overlapCheck = await usersDb.query(
+        `SELECT trip_id, destination, start_date, end_date
+         FROM trips
+         WHERE user_id = $1
+           AND trip_id <> $2
+           AND NOT (end_date < $3::date OR start_date > $4::date)
+         ORDER BY start_date
+         LIMIT 1`,
+        [currentUserId, tripId, finalStartDate, finalEndDate]
+      );
+      if (overlapCheck.rows.length > 0) {
+        const conflict = overlapCheck.rows[0];
+        return res.status(409).json({
+          error: `Updated dates overlap with another trip (${conflict.destination}: ${conflict.start_date.toISOString().split('T')[0]} to ${conflict.end_date.toISOString().split('T')[0]}). You can only have one trip at a time.`,
         });
       }
     }
@@ -580,3 +628,144 @@ export const deleteTrip = async (req, res) => {
   }
 };
 
+// POST /api/trips/:id/activities/complete
+export const completeTripActivity = async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.id, 10);
+    if (isNaN(tripId) || tripId <= 0) {
+      return res.status(400).json({ error: 'Invalid trip ID. Must be a positive integer' });
+    }
+
+    const tripCheck = await usersDb.query('SELECT trip_id FROM trips WHERE trip_id = $1', [tripId]);
+    if (tripCheck.rowCount === 0) {
+      return res.status(404).json({ error: 'Trip not found' });
+    }
+
+    const {
+      title,
+      description,
+      category,
+      address,
+      estimated_time,
+      cost,
+      rating,
+      review_count,
+      feedback,
+      completed_at,
+    } = req.body ?? {};
+
+    if (!title || typeof title !== 'string') {
+      return res.status(400).json({ error: 'title is required' });
+    }
+
+    const completedAt = completed_at ? new Date(completed_at) : new Date();
+    if (isNaN(completedAt.getTime())) {
+      return res.status(400).json({ error: 'completed_at must be a valid datetime if provided' });
+    }
+
+    const parsedRating =
+      rating !== undefined && rating !== null ? parseFloat(rating) : null;
+    if (parsedRating !== null && (isNaN(parsedRating) || parsedRating < 0 || parsedRating > 5)) {
+      return res.status(400).json({ error: 'rating must be between 0 and 5' });
+    }
+
+    const parsedReviewCount =
+      review_count !== undefined && review_count !== null ? parseInt(review_count, 10) : null;
+    if (parsedReviewCount !== null && (isNaN(parsedReviewCount) || parsedReviewCount < 0)) {
+      return res.status(400).json({ error: 'review_count must be a non-negative integer' });
+    }
+
+    const result = await usersDb.query(
+      `INSERT INTO trip_activity_logs (
+         trip_id, title, description, category, address, estimated_time, cost,
+         rating, review_count, feedback, completed_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)
+       RETURNING id, trip_id, title, description, category, address, estimated_time, cost,
+         rating, review_count, feedback, completed_at, created_at`,
+      [
+        tripId,
+        title,
+        description || null,
+        category || null,
+        address || null,
+        estimated_time || null,
+        cost || null,
+        parsedRating,
+        parsedReviewCount,
+        feedback ? JSON.stringify(feedback) : null,
+        completedAt.toISOString(),
+      ]
+    );
+
+    const row = result.rows[0];
+    res.status(201).json({
+      message: 'Activity completion saved',
+      activity_log: {
+        id: row.id,
+        trip_id: row.trip_id,
+        title: row.title,
+        description: row.description,
+        category: row.category,
+        address: row.address,
+        estimated_time: row.estimated_time,
+        cost: row.cost,
+        rating: row.rating != null ? parseFloat(row.rating) : null,
+        review_count: row.review_count,
+        feedback: row.feedback,
+        completed_at: row.completed_at,
+        created_at: row.created_at,
+      },
+    });
+  } catch (error) {
+    console.error('Error saving completed activity:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// GET /api/trips/:id/activities
+export const getTripActivities = async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.id, 10);
+    if (isNaN(tripId) || tripId <= 0) {
+      return res.status(400).json({ error: 'Invalid trip ID. Must be a positive integer' });
+    }
+
+    const { completed } = req.query;
+    let query = `
+      SELECT id, trip_id, title, description, category, address, estimated_time, cost,
+             rating, review_count, feedback, completed_at, created_at
+      FROM trip_activity_logs
+      WHERE trip_id = $1
+    `;
+    const values = [tripId];
+
+    if (completed === 'true') {
+      query += ' AND completed_at IS NOT NULL';
+    }
+
+    query += ' ORDER BY completed_at ASC, id ASC';
+
+    const result = await usersDb.query(query, values);
+    const activities = result.rows.map((row) => ({
+      id: row.id,
+      trip_id: row.trip_id,
+      title: row.title,
+      description: row.description,
+      category: row.category,
+      address: row.address,
+      estimated_time: row.estimated_time,
+      cost: row.cost,
+      rating: row.rating != null ? parseFloat(row.rating) : null,
+      review_count: row.review_count,
+      feedback: row.feedback,
+      completed_at: row.completed_at,
+      created_at: row.created_at,
+    }));
+
+    res.json({ activities });
+  } catch (error) {
+    console.error('Error fetching trip activity logs:', error);
+    res.status(500).json({ error: error.message });
+  }
+};

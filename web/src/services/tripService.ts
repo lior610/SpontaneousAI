@@ -110,13 +110,23 @@ export async function saveTripSetup(setup: TripSetup): Promise<SaveTripResult> {
 
   if (!res.ok) {
     const errorText = await res.text().catch(() => '');
+    let parsedError = '';
+    try {
+      const parsed = JSON.parse(errorText) as { error?: string };
+      parsedError = parsed.error ?? '';
+    } catch {
+      parsedError = '';
+    }
     if (res.status === 404 && errorText.includes('User not found')) {
       throw new Error(
         'Your account was not found in the database. Please log out and log in again, or register if you haven’t yet.',
       );
     }
+    if (res.status === 409 && parsedError) {
+      throw new Error(parsedError);
+    }
     throw new Error(
-      `Failed to save trip (status ${res.status}): ${errorText || res.statusText}`,
+      `Failed to save trip (status ${res.status}): ${parsedError || errorText || res.statusText}`,
     );
   }
 
@@ -271,17 +281,62 @@ export async function fetchNextActivity(): Promise<Activity | null> {
 }
 
 export async function completeActivity(
+  tripId: number,
   activity: Activity,
   feedback: Activity['feedback']
 ): Promise<void> {
-  // TODO: POST /api/trips/:id/activities/:activityId/complete
+  if (!tripId || Number.isNaN(tripId)) {
+    throw new Error('Missing trip id for activity completion');
+  }
+  const res = await fetch(`${API_BASE}/api/trips/${tripId}/activities/complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: activity.title,
+      description: activity.description,
+      category: activity.category,
+      address: activity.address,
+      estimated_time: activity.estimatedTime,
+      cost: activity.cost,
+      rating: activity.rating,
+      review_count: activity.reviewCount,
+      feedback,
+      completed_at: new Date().toISOString(),
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Failed to save completed activity (${res.status}): ${text || res.statusText}`);
+  }
+
   completedMock.push({ ...activity, completed: true, feedback });
   mockIndex++;
 }
 
-export async function fetchCompletedActivities(): Promise<Activity[]> {
-  // TODO: GET /api/trips/:id/activities?completed=true
-  return [...completedMock];
+export interface CompletedActivityLog {
+  id: number;
+  trip_id: number;
+  title: string;
+  description: string | null;
+  category: Activity['category'] | null;
+  address: string | null;
+  estimated_time: string | null;
+  cost: string | null;
+  rating: number | null;
+  review_count: number | null;
+  feedback?: Activity['feedback'];
+  completed_at: string;
+}
+
+export async function fetchCompletedActivities(tripId: number): Promise<CompletedActivityLog[]> {
+  if (!tripId || Number.isNaN(tripId)) return [];
+  const res = await fetch(`${API_BASE}/api/trips/${tripId}/activities?completed=true`);
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`Failed to fetch completed activities (${res.status}): ${text || res.statusText}`);
+  }
+  const data = JSON.parse(text) as { activities?: CompletedActivityLog[] };
+  return Array.isArray(data.activities) ? data.activities : [];
 }
 
 // ─── Trip Lifecycle ───────────────────────────────────────────

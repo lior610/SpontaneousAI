@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { format } from 'date-fns';
 import { getCurrentUser } from '@/services/authService';
+import { API_BASE } from '@/config';
 import { 
   Calendar, MapPin, ArrowRight, ArrowLeft, Check,
   UtensilsCrossed, TreePine, Theater, PartyPopper, 
@@ -10,6 +11,7 @@ import {
 import { StepIndicator } from '@/components/StepIndicator';
 import { TripSetup, TripPreferences, TripConstraints, defaultTripSetup } from '@/types/trip';
 import { saveTripSetup } from '@/services/tripService';
+import { featureFlags } from '@/config/featureFlags';
 
 const stepLabels = ['Dates', 'Preferences', 'Constraints', 'Confirm'];
 
@@ -30,11 +32,16 @@ const transportOptions = [
 
 export default function WizardPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const flowState = (location.state as { editTripId?: number } | null) ?? {};
+  const editTripId = flowState.editTripId;
   const [tripSetup, setTripSetup] = useState<TripSetup>({ ...defaultTripSetup });
   const [wizardStep, setWizardStep] = useState(1);
   const [localDestination, setLocalDestination] = useState(tripSetup.destination);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [dateConflictError, setDateConflictError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCheckingDates, setIsCheckingDates] = useState(false);
 
   // Require login: redirect to login if not authenticated
   const user = getCurrentUser();
@@ -66,9 +73,45 @@ export default function WizardPage() {
     }));
   };
 
+  const checkDateOverlap = async (startDate: Date, endDate: Date): Promise<string | null> => {
+    if (!user) return null;
+    const res = await fetch(`${API_BASE}/api/trips?user_id=${user.id}`);
+    const text = await res.text();
+    if (!res.ok) return null;
+    const data = JSON.parse(text) as {
+      trips?: Array<{ trip_id: number; destination: string; start_date: string; end_date: string }>;
+    };
+    const trips = Array.isArray(data.trips) ? data.trips : [];
+
+    for (const trip of trips) {
+      if (editTripId && trip.trip_id === editTripId) continue;
+      const existingStart = new Date(`${String(trip.start_date).slice(0, 10)}T00:00:00`);
+      const existingEnd = new Date(`${String(trip.end_date).slice(0, 10)}T00:00:00`);
+      const overlaps = existingStart <= endDate && existingEnd >= startDate;
+      if (overlaps) {
+        return `Trip dates overlap with an existing trip (${trip.destination}: ${String(trip.start_date).slice(0, 10)} to ${String(trip.end_date).slice(0, 10)}). You can only have one trip at a time.`;
+      }
+    }
+    return null;
+  };
+
   const handleNext = async () => {
     if (wizardStep === 1) {
+      setDateConflictError(null);
       setTripSetup(prev => ({ ...prev, destination: localDestination }));
+
+      if (tripSetup.startDate && tripSetup.endDate) {
+        setIsCheckingDates(true);
+        try {
+          const overlapMessage = await checkDateOverlap(tripSetup.startDate, tripSetup.endDate);
+          if (overlapMessage) {
+            setDateConflictError(overlapMessage);
+            return;
+          }
+        } finally {
+          setIsCheckingDates(false);
+        }
+      }
     }
     if (wizardStep < 4) {
       setWizardStep(wizardStep + 1);
@@ -102,6 +145,10 @@ export default function WizardPage() {
     return true;
   };
 
+  const visiblePreferenceItems = preferenceItems.filter(
+    (item) => item.key !== 'pace' || featureFlags.wizard.showTripPace,
+  );
+
   const hasInvalidDateRange =
     wizardStep === 1 &&
     tripSetup.startDate &&
@@ -110,6 +157,7 @@ export default function WizardPage() {
 
   const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
     const date = value ? new Date(value + 'T00:00:00') : null;
+    setDateConflictError(null);
     setTripSetup(prev => ({ ...prev, [field]: date }));
   };
 
@@ -191,6 +239,11 @@ export default function WizardPage() {
                   End date must be on or after the start date.
                 </p>
               )}
+              {dateConflictError && (
+                <p className="mt-3 px-5 text-sm text-destructive font-medium">
+                  {dateConflictError}
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -203,7 +256,7 @@ export default function WizardPage() {
               <p className="text-muted-foreground">Adjust sliders to match your travel style</p>
             </div>
 
-            {preferenceItems.map(({ key, label, emoji }) => (
+            {visiblePreferenceItems.map(({ key, label, emoji }) => (
               <div key={key} className="rounded-xl border bg-card shadow-card hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
                 <div className="p-5">
                   <div className="flex items-center justify-between mb-4">
@@ -364,9 +417,11 @@ export default function WizardPage() {
               <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-4">
                 <p className="text-sm font-medium text-destructive">Could not save trip</p>
                 <p className="mt-1 text-sm text-muted-foreground">{saveError}</p>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Check that the API is running (e.g. npm run dev in api/) and the database is set up (see database/README.md).
-                </p>
+                {!saveError.toLowerCase().includes('overlap') && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Check that the API is running (e.g. npm run dev in api/) and the database is set up (see database/README.md).
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -386,10 +441,12 @@ export default function WizardPage() {
           )}
           <button
             onClick={handleNext}
-            disabled={!canProceed() || isSaving}
+            disabled={!canProceed() || isSaving || isCheckingDates}
             className="flex-1 inline-flex items-center justify-center gap-2 h-12 rounded-xl text-base font-bold bg-gradient-to-r from-accent to-accent-light text-accent-foreground shadow-lg hover:shadow-glow hover:-translate-y-1 hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none"
           >
-            {wizardStep === 4 ? (
+            {isCheckingDates ? (
+              <>Checking dates…</>
+            ) : wizardStep === 4 ? (
               isSaving ? (
                 <>Saving…</>
               ) : (

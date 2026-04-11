@@ -1,8 +1,11 @@
+import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Sparkles, MapPin, Clock, Compass, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Sparkles, MapPin, Clock, Compass, ArrowRight, CheckCircle2, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import heroMap from '@/assets/hero-map.png';
-import { getCurrentUser } from '@/services/authService';
+import { clearCurrentUser, getCurrentUser } from '@/services/authService';
+import { API_BASE } from '@/config';
+import { TripSetup, defaultTripSetup } from '@/types/trip';
 
 const features = [
   {
@@ -31,13 +34,77 @@ const benefits = [
 
 export function LandingPage() {
   const navigate = useNavigate();
+  const currentUser = getCurrentUser();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [activeTrip, setActiveTrip] = useState<{ tripId: number; tripSetup: TripSetup } | null>(null);
+
+  useEffect(() => {
+    const loadActiveTrip = async () => {
+      if (!currentUser) {
+        setActiveTrip(null);
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/api/trips?user_id=${currentUser.id}`);
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          trips?: Array<{
+            trip_id: number;
+            destination: string;
+            start_date: string;
+            end_date: string;
+            preference_breakdown: Record<string, number> | null;
+            max_walking_distance: number | null;
+            preferred_transportation: 'walking' | 'public' | 'taxi' | null;
+          }>;
+        };
+        const trips = Array.isArray(data.trips) ? data.trips : [];
+        const today = new Date();
+        const active = trips.find((trip) => {
+          const start = new Date(String(trip.start_date).slice(0, 10));
+          const end = new Date(String(trip.end_date).slice(0, 10));
+          return start <= today && end >= today;
+        });
+        if (!active) {
+          setActiveTrip(null);
+          return;
+        }
+        setActiveTrip({
+          tripId: active.trip_id,
+          tripSetup: {
+            startDate: new Date(String(active.start_date).slice(0, 10)),
+            endDate: new Date(String(active.end_date).slice(0, 10)),
+            destination: active.destination,
+            preferences: {
+              ...defaultTripSetup.preferences,
+              ...(active.preference_breakdown ?? {}),
+            },
+            constraints: {
+              maxWalkingDistance: active.max_walking_distance ?? defaultTripSetup.constraints.maxWalkingDistance,
+              transportType: active.preferred_transportation ?? defaultTripSetup.constraints.transportType,
+            },
+          },
+        });
+      } catch {
+        // Keep homepage usable even if trips fetch fails.
+      }
+    };
+
+    void loadActiveTrip();
+  }, [currentUser]);
 
   const handleStartTrip = () => {
-    if (!getCurrentUser()) {
+    if (!currentUser) {
       navigate('/login');
       return;
     }
     navigate('/wizard');
+  };
+
+  const handleLogout = () => {
+    clearCurrentUser();
+    setShowLogoutConfirm(false);
+    navigate('/', { replace: true });
   };
 
   return (
@@ -61,12 +128,31 @@ export function LandingPage() {
             <span className="text-xl font-bold text-gradient-hero">Spontaneous AI</span>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/login">Login</Link>
-            </Button>
-            <Button variant="default" size="sm" onClick={handleStartTrip}>
-              Start Trip →
-            </Button>
+            {currentUser && (
+              <Button variant="glass" size="sm" asChild>
+                <Link to="/trips">Manage Trips</Link>
+              </Button>
+            )}
+            {!currentUser ? (
+              <Button variant="default" size="sm" asChild>
+                <Link to="/login">Login</Link>
+              </Button>
+            ) : (
+              <div className="flex items-center gap-2">
+                {activeTrip && (
+                  <Button
+                    variant="accent"
+                    size="sm"
+                    onClick={() => navigate('/trip', { state: { tripSetup: activeTrip.tripSetup, tripId: activeTrip.tripId } })}
+                  >
+                    Continue Trip
+                  </Button>
+                )}
+                <Button variant="default" size="sm" onClick={handleStartTrip}>
+                  New Trip
+                </Button>
+              </div>
+            )}
           </div>
         </header>
 
@@ -96,7 +182,7 @@ export function LandingPage() {
                 onClick={handleStartTrip}
                 className="w-full sm:w-auto"
               >
-                Start Your Trip
+                New Trip
                 <ArrowRight className="w-5 h-5 ml-2" />
               </Button>
             </div>
@@ -200,7 +286,7 @@ export function LandingPage() {
             size="xl"
             onClick={handleStartTrip}
           >
-            Start Planning Now
+            New Trip
             <ArrowRight className="w-5 h-5 ml-2" />
           </Button>
         </div>
@@ -218,6 +304,38 @@ export function LandingPage() {
           </p>
         </div>
       </footer>
+
+      {currentUser && (
+        <button
+          onClick={() => setShowLogoutConfirm(true)}
+          className="fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full bg-destructive text-destructive-foreground shadow-lg hover:bg-destructive/90 transition-all duration-200 flex items-center justify-center"
+          title="Log out"
+          aria-label="Log out"
+        >
+          <LogOut className="w-5 h-5" />
+        </button>
+      )}
+
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-foreground/45 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md rounded-2xl border bg-card shadow-2xl animate-scale-in">
+            <div className="p-5">
+              <h3 className="text-lg font-semibold">Log out?</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                You will need to log in again to continue.
+              </p>
+            </div>
+            <div className="px-5 pb-5 flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowLogoutConfirm(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" size="sm" onClick={handleLogout}>
+                Log Out
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
