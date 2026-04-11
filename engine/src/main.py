@@ -24,12 +24,18 @@ spec_utils = importlib.util.spec_from_file_location("utilities", utilities_path)
 utilities = importlib.util.module_from_spec(spec_utils)
 spec_utils.loader.exec_module(utilities)
 
+preferences_path = __file__.replace('main.py', 'internal-routes/preferences.py')
+spec_prefs = importlib.util.spec_from_file_location("preferences", preferences_path)
+preferences = importlib.util.module_from_spec(spec_prefs)
+spec_prefs.loader.exec_module(preferences)
+
 app = FastAPI(title="Attraction Engine")
 
 # Include routers
 app.include_router(attractions.router)
 app.include_router(recommendations.router)
 app.include_router(utilities.router)
+app.include_router(preferences.router)
 
 @app.get("/status")
 def status():

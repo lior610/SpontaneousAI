@@ -20,6 +20,11 @@ export interface SaveTripResult {
   tripId: number;
 }
 
+/** Pass `editTripId` to update an existing trip instead of creating a new one. */
+export interface SaveTripOptions {
+  editTripId?: number;
+}
+
 function getCurrentUserId(): number {
   const rawUser = window.localStorage.getItem('currentUser');
   if (!rawUser) throw new Error('You must be logged in to save a trip');
@@ -76,7 +81,31 @@ export async function fetchTripSetup(): Promise<TripSetup> {
   return { ...defaultTripSetup };
 }
 
-export async function saveTripSetup(setup: TripSetup): Promise<SaveTripResult> {
+function parseTripSaveError(res: Response, errorText: string): Error {
+  let parsedError = '';
+  try {
+    const parsed = JSON.parse(errorText) as { error?: string };
+    parsedError = parsed.error ?? '';
+  } catch {
+    parsedError = '';
+  }
+  if (res.status === 404 && errorText.includes('User not found')) {
+    return new Error(
+      'Your account was not found in the database. Please log out and log in again, or register if you haven’t yet.',
+    );
+  }
+  if (res.status === 409 && parsedError) {
+    return new Error(parsedError);
+  }
+  return new Error(
+    `Failed to save trip (status ${res.status}): ${parsedError || errorText || res.statusText}`,
+  );
+}
+
+export async function saveTripSetup(
+  setup: TripSetup,
+  options?: SaveTripOptions,
+): Promise<SaveTripResult> {
   const userId = getCurrentUserId();
   if (!setup.startDate || !setup.endDate || !setup.destination) {
     throw new Error('startDate, endDate, and destination are required to save a trip');
@@ -85,21 +114,48 @@ export async function saveTripSetup(setup: TripSetup): Promise<SaveTripResult> {
   // 1) Persist user preferences to users table (skipped if user not found, e.g. 404)
   await updateUserPreferences(setup);
 
-  // 2) Create trip
   const budget =
     setup.preferences.budget != null
       ? Math.round((setup.preferences.budget / 100) * 5000)
       : null;
 
+  const startDate = setup.startDate.toISOString().split('T')[0];
+  const endDate = setup.endDate.toISOString().split('T')[0];
+  const preference_breakdown = preferenceBreakdownFromSetup(setup);
+  const { maxWalkingDistance, transportType } = setup.constraints;
+
+  const editTripId = options?.editTripId;
+
+  if (editTripId != null) {
+    const res = await fetch(`${API_BASE}/api/trips/${editTripId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        destination: setup.destination,
+        start_date: startDate,
+        end_date: endDate,
+        budget,
+        preference_breakdown,
+        max_walking_distance: maxWalkingDistance,
+        preferred_transportation: transportType,
+      }),
+    });
+    const errorText = await res.text().catch(() => '');
+    if (!res.ok) {
+      throw parseTripSaveError(res, errorText);
+    }
+    return { setup, tripId: editTripId };
+  }
+
   const tripBody = {
     user_id: userId,
     destination: setup.destination,
-    start_date: setup.startDate.toISOString().split('T')[0],
-    end_date: setup.endDate.toISOString().split('T')[0],
+    start_date: startDate,
+    end_date: endDate,
     budget,
-    preference_breakdown: preferenceBreakdownFromSetup(setup),
-    max_walking_distance: setup.constraints.maxWalkingDistance,
-    preferred_transportation: setup.constraints.transportType,
+    preference_breakdown,
+    max_walking_distance: maxWalkingDistance,
+    preferred_transportation: transportType,
   };
 
   const res = await fetch(`${API_BASE}/api/trips`, {
@@ -110,27 +166,10 @@ export async function saveTripSetup(setup: TripSetup): Promise<SaveTripResult> {
 
   if (!res.ok) {
     const errorText = await res.text().catch(() => '');
-    let parsedError = '';
-    try {
-      const parsed = JSON.parse(errorText) as { error?: string };
-      parsedError = parsed.error ?? '';
-    } catch {
-      parsedError = '';
-    }
-    if (res.status === 404 && errorText.includes('User not found')) {
-      throw new Error(
-        'Your account was not found in the database. Please log out and log in again, or register if you haven’t yet.',
-      );
-    }
-    if (res.status === 409 && parsedError) {
-      throw new Error(parsedError);
-    }
-    throw new Error(
-      `Failed to save trip (status ${res.status}): ${parsedError || errorText || res.statusText}`,
-    );
+    throw parseTripSaveError(res, errorText);
   }
 
-  const data = await res.json();
+  const data = (await res.json()) as { trip?: { trip_id?: number }; trip_id?: number };
   const tripId = data.trip?.trip_id ?? data.trip_id;
   if (typeof tripId !== 'number') {
     throw new Error('Server did not return a trip id');

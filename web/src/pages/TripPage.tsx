@@ -93,7 +93,11 @@ export function TripPage() {
                 <Briefcase className="w-5 h-5" />
               </button>
               <button
-                onClick={() => navigate('/wizard', { state: { tripSetup } })}
+                onClick={() =>
+                  navigate('/wizard', {
+                    state: { tripSetup, ...(tripId != null ? { editTripId: tripId } : {}) },
+                  })
+                }
                 className="w-10 h-10 flex items-center justify-center rounded-lg text-foreground hover:bg-muted transition-all"
                 title="Trip settings"
               >

@@ -30,14 +30,29 @@ const transportOptions = [
   { value: 'taxi', icon: Car, label: 'Taxi/Ride-share' },
 ] as const;
 
+function mergeTripSetupFromNavigation(ts?: TripSetup): TripSetup {
+  if (!ts) return { ...defaultTripSetup };
+  return {
+    ...defaultTripSetup,
+    ...ts,
+    preferences: { ...defaultTripSetup.preferences, ...ts.preferences },
+    constraints: { ...defaultTripSetup.constraints, ...ts.constraints },
+  };
+}
+
 export default function WizardPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const flowState = (location.state as { editTripId?: number } | null) ?? {};
+  const flowState =
+    (location.state as { editTripId?: number; tripSetup?: TripSetup } | null) ?? {};
   const editTripId = flowState.editTripId;
-  const [tripSetup, setTripSetup] = useState<TripSetup>({ ...defaultTripSetup });
+  const [tripSetup, setTripSetup] = useState<TripSetup>(() =>
+    mergeTripSetupFromNavigation(flowState.tripSetup),
+  );
   const [wizardStep, setWizardStep] = useState(1);
-  const [localDestination, setLocalDestination] = useState(tripSetup.destination);
+  const [localDestination, setLocalDestination] = useState(
+    () => flowState.tripSetup?.destination ?? '',
+  );
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dateConflictError, setDateConflictError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -120,7 +135,10 @@ export default function WizardPage() {
       setSaveError(null);
       setIsSaving(true);
       try {
-        const { tripId } = await saveTripSetup(finalSetup);
+        const { tripId } = await saveTripSetup(
+          finalSetup,
+          editTripId != null ? { editTripId } : undefined,
+        );
         navigate('/trip', { state: { tripSetup: finalSetup, tripId } });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to save trip';

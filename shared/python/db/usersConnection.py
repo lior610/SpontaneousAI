@@ -9,7 +9,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, Generator
 
-_env_file = Path(__file__).resolve().parents[3] / ".env"
+from db.env_path import resolve_dotenv_path
+
+_env_file = resolve_dotenv_path()
 try:
     from dotenv import load_dotenv
 

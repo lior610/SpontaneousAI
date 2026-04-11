@@ -3,6 +3,7 @@
  */
 
 import * as usersDb from '../db/usersConnection.js';
+import { buildUserTripPreferenceEmbedding } from '../services/preferenceEmbedding.js';
 
 export const getTrips = async (req, res) => {
   try {
@@ -262,6 +263,10 @@ export const createTrip = async (req, res) => {
         updated_at: newTrip.updated_at
       }
     });
+
+    buildUserTripPreferenceEmbedding(userId, newTrip.trip_id).catch((err) => {
+      console.error('[preference embedding] after createTrip:', err.message || err);
+    });
   } catch (error) {
     console.error('Error creating trip:', error);
     
@@ -291,6 +296,9 @@ export const updateTrip = async (req, res) => {
       start_date, 
       end_date, 
       budget,
+      preference_breakdown,
+      max_walking_distance,
+      preferred_transportation,
       max_travel_time_min,
       with_kids,
       current_lat,
@@ -299,6 +307,13 @@ export const updateTrip = async (req, res) => {
       local_hour_last_seen,
       day_of_week_last_seen
     } = req.body;
+
+    const rebuildPreferenceEmbedding = [
+      'preference_breakdown',
+      'max_walking_distance',
+      'preferred_transportation',
+      'with_kids',
+    ].some((k) => req.body[k] !== undefined);
 
     // Validate id is a number
     const tripId = parseInt(id, 10);
@@ -372,6 +387,55 @@ export const updateTrip = async (req, res) => {
         values.push(budgetValue);
       } else {
         updates.push(`budget = $${paramIndex}`);
+        values.push(null);
+      }
+      paramIndex++;
+    }
+
+    if (preference_breakdown !== undefined) {
+      if (preference_breakdown !== null && typeof preference_breakdown === 'object') {
+        updates.push(`preference_breakdown = $${paramIndex}::jsonb`);
+        values.push(JSON.stringify(preference_breakdown));
+      } else if (preference_breakdown === null) {
+        updates.push(`preference_breakdown = $${paramIndex}`);
+        values.push(null);
+      } else {
+        return res.status(400).json({
+          error: 'preference_breakdown must be an object, null, or omitted',
+        });
+      }
+      paramIndex++;
+    }
+
+    if (max_walking_distance !== undefined) {
+      if (max_walking_distance !== null) {
+        const val = parseFloat(max_walking_distance);
+        if (isNaN(val) || val < 0) {
+          return res.status(400).json({
+            error: 'max_walking_distance must be a non-negative number (km) or null',
+          });
+        }
+        updates.push(`max_walking_distance = $${paramIndex}`);
+        values.push(val);
+      } else {
+        updates.push(`max_walking_distance = $${paramIndex}`);
+        values.push(null);
+      }
+      paramIndex++;
+    }
+
+    const validTransport = ['walking', 'public', 'taxi'];
+    if (preferred_transportation !== undefined) {
+      if (preferred_transportation !== null && preferred_transportation !== '') {
+        if (!validTransport.includes(preferred_transportation)) {
+          return res.status(400).json({
+            error: `preferred_transportation must be one of: ${validTransport.join(', ')}`,
+          });
+        }
+        updates.push(`preferred_transportation = $${paramIndex}`);
+        values.push(preferred_transportation);
+      } else {
+        updates.push(`preferred_transportation = $${paramIndex}`);
         values.push(null);
       }
       paramIndex++;
@@ -481,7 +545,8 @@ export const updateTrip = async (req, res) => {
     // Check if any fields to update
     if (updates.length === 0) {
       return res.status(400).json({ 
-        error: 'No fields provided to update. Provide at least one of: destination, start_date, end_date, budget' 
+        error:
+          'No fields provided to update. Provide at least one of: destination, start_date, end_date, budget, preference_breakdown, max_walking_distance, preferred_transportation, max_travel_time_min, with_kids, current_lat, current_lng, timezone, local_hour_last_seen, day_of_week_last_seen',
       });
     }
 
@@ -558,6 +623,7 @@ export const updateTrip = async (req, res) => {
       SET ${updates.join(', ')} 
       WHERE trip_id = $${paramIndex}
       RETURNING trip_id, user_id, destination, start_date, end_date, budget,
+        preference_breakdown, max_walking_distance, preferred_transportation,
         max_travel_time_min, with_kids,
         current_lat, current_lng, timezone,
         local_hour_last_seen, day_of_week_last_seen,
@@ -577,6 +643,9 @@ export const updateTrip = async (req, res) => {
         start_date: updatedTrip.start_date,
         end_date: updatedTrip.end_date,
         budget: updatedTrip.budget ? parseFloat(updatedTrip.budget) : null,
+        preference_breakdown: updatedTrip.preference_breakdown,
+        max_walking_distance: updatedTrip.max_walking_distance != null ? parseFloat(updatedTrip.max_walking_distance) : null,
+        preferred_transportation: updatedTrip.preferred_transportation,
         max_travel_time_min: updatedTrip.max_travel_time_min,
         with_kids: updatedTrip.with_kids,
         current_lat: updatedTrip.current_lat ? parseFloat(updatedTrip.current_lat) : null,
@@ -588,6 +657,12 @@ export const updateTrip = async (req, res) => {
         updated_at: updatedTrip.updated_at
       }
     });
+
+    if (rebuildPreferenceEmbedding) {
+      buildUserTripPreferenceEmbedding(updatedTrip.user_id, tripId).catch((err) => {
+        console.error('[preference embedding] after updateTrip:', err.message || err);
+      });
+    }
   } catch (error) {
     console.error('Error updating trip:', error);
     

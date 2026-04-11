@@ -4,6 +4,7 @@
 
 import bcrypt from 'bcryptjs';
 import * as usersDb from '../db/usersConnection.js';
+import { buildPreferenceEmbeddingsForUser } from '../services/preferenceEmbedding.js';
 
 // GET /api/users — minimal columns so it works with or without preference columns
 export const getUsers = async (req, res) => {
@@ -320,6 +321,22 @@ export const updateUser = async (req, res) => {
     }
 
     const updatedUser = result.rows[0];
+
+    const embeddingFields = [
+      'home_country',
+      'age_group',
+      'travel_style',
+      'pace_preference',
+      'preferred_start_hour',
+      'dietary_style',
+      'hunger_level',
+      'energy_level',
+    ];
+    if (embeddingFields.some((k) => req.body[k] !== undefined)) {
+      buildPreferenceEmbeddingsForUser(userId).catch((err) => {
+        console.error('[preference embedding] after updateUser:', err.message || err);
+      });
+    }
 
     res.json({
       message: 'User updated successfully',
