@@ -4,6 +4,7 @@
  * Calls API to update user preferences (users table) and create trips (trips table).
  */
 
+import { format } from 'date-fns';
 import { API_BASE } from '@/config';
 import {
   TripSetup,
@@ -93,8 +94,8 @@ export async function saveTripSetup(setup: TripSetup, editTripId?: number | null
   const tripBody = {
     user_id: userId,
     destination: setup.destination,
-    start_date: setup.startDate.toISOString().split('T')[0],
-    end_date: setup.endDate.toISOString().split('T')[0],
+    start_date: format(setup.startDate, 'yyyy-MM-dd'),
+    end_date: format(setup.endDate, 'yyyy-MM-dd'),
     budget,
     preference_breakdown: preferenceBreakdownFromSetup(setup),
     max_walking_distance: setup.constraints.maxWalkingDistance,
