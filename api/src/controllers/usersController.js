@@ -4,6 +4,7 @@
 
 import bcrypt from 'bcryptjs';
 import * as usersDb from '../db/usersConnection.js';
+import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedding.js';
 
 // GET /api/users — minimal columns so it works with or without preference columns
 export const getUsers = async (req, res) => {
@@ -150,6 +151,11 @@ export const updateUser = async (req, res) => {
       hunger_level,
       energy_level
     } = req.body;
+
+    const affectsPreferenceEmbedding =
+      travel_style !== undefined ||
+      pace_preference !== undefined ||
+      dietary_style !== undefined;
 
     // Validate id is a number
     const userId = parseInt(id, 10);
@@ -320,6 +326,23 @@ export const updateUser = async (req, res) => {
     }
 
     const updatedUser = result.rows[0];
+
+    if (affectsPreferenceEmbedding) {
+      try {
+        const trips = await usersDb.query(
+          `SELECT trip_id FROM trips WHERE user_id = $1 AND end_date >= CURRENT_DATE`,
+          [userId]
+        );
+        for (const row of trips.rows) {
+          schedulePreferenceEmbeddingRebuild(userId, row.trip_id);
+        }
+      } catch (scheduleErr) {
+        console.error(
+          '[API] Failed to schedule preference embedding rebuilds after user update:',
+          scheduleErr.message
+        );
+      }
+    }
 
     res.json({
       message: 'User updated successfully',

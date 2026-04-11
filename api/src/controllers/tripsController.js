@@ -4,6 +4,7 @@
 
 import * as usersDb from '../db/usersConnection.js';
 import axios from 'axios';
+import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedding.js';
 
 // In-memory cache to hold arrays of recommendations returned by the Engine
 const tripRecommendationsCache = new Map();
@@ -259,6 +260,8 @@ export const createTrip = async (req, res) => {
 
     const newTrip = result.rows[0];
 
+    schedulePreferenceEmbeddingRebuild(userId, newTrip.trip_id);
+
     res.status(201).json({
       message: 'Trip created successfully',
       trip: {
@@ -316,6 +319,16 @@ export const updateTrip = async (req, res) => {
       local_hour_last_seen,
       day_of_week_last_seen
     } = req.body;
+
+    const tripPreferenceKeys = [
+      'preference_breakdown',
+      'max_walking_distance',
+      'preferred_transportation',
+      'with_kids',
+    ];
+    const shouldRebuildPreferenceEmbedding = tripPreferenceKeys.some(
+      (k) => req.body[k] !== undefined,
+    );
 
     // Validate id is a number
     const tripId = parseInt(id, 10);
@@ -638,6 +651,10 @@ export const updateTrip = async (req, res) => {
     const result = await usersDb.query(updateQuery, values);
 
     const updatedTrip = result.rows[0];
+
+    if (shouldRebuildPreferenceEmbedding) {
+      schedulePreferenceEmbeddingRebuild(updatedTrip.user_id, updatedTrip.trip_id);
+    }
 
     res.json({
       message: 'Trip updated successfully',

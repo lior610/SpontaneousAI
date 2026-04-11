@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { format } from 'date-fns';
+import { format, startOfDay } from 'date-fns';
 import { getCurrentUser } from '@/services/authService';
 import { API_BASE } from '@/config';
 import { 
@@ -29,6 +29,14 @@ const transportOptions = [
   { value: 'public', icon: Train, label: 'Public Transit' },
   { value: 'taxi', icon: Car, label: 'Taxi/Ride-share' },
 ] as const;
+
+/** Trip is "current" if today falls within [start, end] (local calendar dates). Otherwise manage on /trips. */
+function isActiveTripNow(startDate: Date, endDate: Date): boolean {
+  const today = startOfDay(new Date());
+  const start = startOfDay(startDate);
+  const end = startOfDay(endDate);
+  return start <= today && today <= end;
+}
 
 export default function WizardPage() {
   const navigate = useNavigate();
@@ -147,7 +155,15 @@ export default function WizardPage() {
       setIsSaving(true);
       try {
         const { tripId } = await saveTripSetup(finalSetup, editTripId);
-        navigate('/trip', { state: { tripSetup: finalSetup, tripId } });
+        if (
+          finalSetup.startDate &&
+          finalSetup.endDate &&
+          isActiveTripNow(finalSetup.startDate, finalSetup.endDate)
+        ) {
+          navigate('/trip', { state: { tripSetup: finalSetup, tripId } });
+        } else {
+          navigate('/trips');
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to save trip';
         setSaveError(message);
