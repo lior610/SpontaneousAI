@@ -963,7 +963,8 @@ export const getNextActivity = async (req, res) => {
               lat: attr.latitude,
               lng: attr.longitude,
               completed: false
-            }
+            },
+            userLocation: { lat: current_lat, lng: current_lng }
           });
         }
       } catch (err) {

@@ -34,7 +34,7 @@ export function TripPage() {
       (pos) => {
         setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
       },
-      () => {},
+      (err) => console.warn('[TripPage] Geolocation failed:', err.message),
       { enableHighAccuracy: false, timeout: 10000 }
     );
   }, []);
@@ -44,12 +44,17 @@ export function TripPage() {
     initialLoadDone.current = true;
     const load = async () => {
       setIsLoading(true);
-      const result = await fetchNextActivity(tripId);
-      setCurrentActivity(result.activity);
-      if (result.userLocation && !userLocation) {
-        setUserLocation(result.userLocation);
+      try {
+        const result = await fetchNextActivity(tripId);
+        setCurrentActivity(result.activity);
+        if (result.userLocation) {
+          setUserLocation(prev => prev ?? result.userLocation);
+        }
+      } catch (err) {
+        console.error('[TripPage] Failed to load activity:', err);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
     load();
   }, [tripId]);
@@ -65,19 +70,30 @@ export function TripPage() {
     }
 
     if (currentActivity) {
-      await completeActivity(tripId, currentActivity, feedback);
+      try {
+        await completeActivity(tripId, currentActivity, feedback);
+      } catch (err) {
+        console.error('[TripPage] Failed to complete activity:', err);
+      }
       setCompletedActivities(prev => [...prev, { ...currentActivity, completed: true, feedback }]);
-      setUserLocation({ lat: currentActivity.lat!, lng: currentActivity.lng! });
+      if (currentActivity.lat != null && currentActivity.lng != null) {
+        setUserLocation({ lat: currentActivity.lat, lng: currentActivity.lng });
+      }
     }
     setShowFeedback(false);
 
     setIsLoading(true);
-    const result = await fetchNextActivity(tripId, needSpecific);
-    setCurrentActivity(result.activity);
-    if (result.userLocation) {
-      setUserLocation(result.userLocation);
+    try {
+      const result = await fetchNextActivity(tripId, needSpecific);
+      setCurrentActivity(result.activity);
+      if (result.userLocation) {
+        setUserLocation(result.userLocation);
+      }
+    } catch (err) {
+      console.error('[TripPage] Failed to fetch next activity:', err);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const handleLogout = () => {
@@ -175,14 +191,19 @@ export function TripPage() {
                     if (tripId && currentActivity) {
                       setIsLoading(true);
                       try {
-                        await skipActivity(tripId, currentActivity.id);
+                        try {
+                          await skipActivity(tripId, currentActivity.id);
+                        } catch (e) {
+                          console.error('[TripPage] Failed to skip activity:', e);
+                        }
+                        const result = await fetchNextActivity(tripId);
+                        setCurrentActivity(result.activity);
+                        if (result.userLocation) setUserLocation(result.userLocation);
                       } catch (e) {
-                        console.error('Failed to skip activity:', e);
+                        console.error('[TripPage] Failed to fetch next activity:', e);
+                      } finally {
+                        setIsLoading(false);
                       }
-                      const result = await fetchNextActivity(tripId);
-                      setCurrentActivity(result.activity);
-                      if (result.userLocation) setUserLocation(result.userLocation);
-                      setIsLoading(false);
                     }
                   }}
                   className="inline-flex items-center gap-2 h-9 px-4 rounded-md text-sm font-semibold text-foreground hover:bg-muted transition-all duration-300"

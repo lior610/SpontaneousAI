@@ -38,9 +38,16 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
       return;
     }
 
+    let retryCount = 0;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+
     const tryRoute = () => {
+      if (cancelled) return;
       if (!mapRef.current) {
-        setTimeout(tryRoute, 300);
+        if (retryCount >= 10) return;
+        retryCount++;
+        timeoutId = setTimeout(tryRoute, 300);
         return;
       }
 
@@ -52,7 +59,7 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
           travelMode: google.maps.TravelMode.WALKING,
         },
         (result, status) => {
-          console.log('[MapView] Directions status:', status);
+          if (cancelled) return;
           if (status === 'OK' && result) {
             if (rendererRef.current) {
               rendererRef.current.setMap(null);
@@ -72,8 +79,6 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
             if (leg?.duration) {
               setWalkingMinutes(leg.duration.text);
             }
-          } else {
-            console.warn('[MapView] Directions failed:', status);
           }
         }
       );
@@ -82,6 +87,8 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
     tryRoute();
 
     return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
       if (rendererRef.current) {
         rendererRef.current.setMap(null);
         rendererRef.current = null;
