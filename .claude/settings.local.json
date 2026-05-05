@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(psql *)",
+      "Bash(brew install *)",
+      "Bash(npm install *)",
+      "Bash(docker-compose up *)",
+      "Bash(docker context ls *)",
+      "Read(//Users/sbenyosef/Library/Containers/com.docker.docker/Data/**)",
+      "Read(//Users/sbenyosef/.docker/run/**)",
+      "Bash(curl -s http://localhost:3000/api/users)",
+      "Bash(grep -v \"^$\")",
+      "Bash(pg_isready *)",
+      "Bash(ln *)",
+      "Bash(xargs ls *)",
+      "Bash(npx tsc *)",
+      "Bash(npx vite *)",
+      "Bash(docker-compose logs *)",
+      "Bash(docker-compose down *)",
+      "Bash(curl -s http://localhost:5173/trip)"
+    ]
+  }
+}

@@ -1024,6 +1024,7 @@ export const getNextActivity = async (req, res) => {
         lng: attr.longitude,
         completed: false
       },
+      userLocation: { lat: current_lat, lng: current_lng },
       _debug: {
         source: freshBatch || cacheExpired ? 'fresh_batch' : 'cached_batch',
         batchIndex: cached.currentIndex,
