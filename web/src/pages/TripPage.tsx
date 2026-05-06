@@ -7,8 +7,10 @@ import { FeedbackPopup } from '@/components/FeedbackPopup';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import { Activity, TripSetup, defaultTripSetup } from '@/types/trip';
-import { fetchNextActivity, completeActivity, skipActivity } from '@/services/tripService';
+import { fetchNextActivity, completeActivity, skipActivity, fetchCompletedActivities } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
+
+const ACTIVITY_CACHE_KEY = (id: number) => `trip_${id}_current_activity`;
 
 export function TripPage() {
   const navigate = useNavigate();
@@ -30,9 +32,42 @@ export function TripPage() {
     initialLoadDone.current = true;
     const load = async () => {
       setIsLoading(true);
-      const activity = await fetchNextActivity(tripId);
-      setCurrentActivity(activity);
-      setIsLoading(false);
+      try {
+        // Use cached activity on refresh to avoid advancing the backend batch index
+        const cached = sessionStorage.getItem(ACTIVITY_CACHE_KEY(tripId));
+        let activity: Activity | null = null;
+        if (cached) {
+          activity = JSON.parse(cached) as Activity;
+        } else {
+          activity = await fetchNextActivity(tripId);
+          if (activity) {
+            sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(activity));
+          }
+        }
+        setCurrentActivity(activity);
+
+        const completed = await fetchCompletedActivities(tripId);
+        if (completed.length > 0) {
+          setCompletedActivities(completed.map(c => ({
+            id: c.id.toString(),
+            title: c.title,
+            description: c.description ?? '',
+            image: '',
+            rating: c.rating ?? 0,
+            reviewCount: c.review_count ?? 0,
+            estimatedTime: c.estimated_time ?? '',
+            cost: c.cost ?? '',
+            category: c.category ?? 'general',
+            address: c.address ?? '',
+            completed: true,
+            feedback: c.feedback,
+          })));
+        }
+      } catch (err) {
+        console.error('[TripPage] Failed to load:', err);
+      } finally {
+        setIsLoading(false);
+      }
     };
     load();
   }, [tripId]);
@@ -53,9 +88,14 @@ export function TripPage() {
     }
     setShowFeedback(false);
 
+    // Clear cache so next fetch advances to a new activity
+    sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
     setIsLoading(true);
     const nextActivity = await fetchNextActivity(tripId, needSpecific);
     setCurrentActivity(nextActivity);
+    if (nextActivity) {
+      sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(nextActivity));
+    }
     setIsLoading(false);
   };
 
@@ -175,8 +215,13 @@ export function TripPage() {
                   } catch (e) {
                     console.error('Failed to skip activity:', e);
                   }
+                  // Invalidate cache so skip fetches a fresh activity from the backend
+                  sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
                   const activity = await fetchNextActivity(tripId);
                   setCurrentActivity(activity);
+                  if (activity) {
+                    sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(activity));
+                  }
                   setIsLoading(false);
                 }
               }}
