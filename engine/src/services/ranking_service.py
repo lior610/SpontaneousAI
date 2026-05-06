@@ -5,9 +5,10 @@ Applies distance, opening hours, budget, and categorical diversity
 filters dynamically on top of the vector similarity score.
 """
 
-import math
 import os
 from typing import List, Dict, Any, Optional
+
+from src.services.geo_utils import haversine
 
 # Scoring weights (must sum to 1.0 ideally)
 WEIGHT_SEMANTIC = float(os.getenv("RANKING_WEIGHT_SEMANTIC", "0.35"))
@@ -22,19 +23,7 @@ CLUSTER_PENALTY_MULTIPLIER = float(os.getenv("RANKING_CLUSTER_PENALTY", "0.5"))
 
 def calculate_haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculate distance between two points in km."""
-    R = 6371.0  # Earth radius in kilometers
-
-    lat1_rad = math.radians(lat1)
-    lon1_rad = math.radians(lon1)
-    lat2_rad = math.radians(lat2)
-    lon2_rad = math.radians(lon2)
-
-    dlon = lon2_rad - lon1_rad
-    dlat = lat2_rad - lat1_rad
-
-    a = math.sin(dlat / 2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c
+    return haversine(lat1, lon1, lat2, lon2)
 
 class RankingEngine:
     """

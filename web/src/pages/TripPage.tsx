@@ -8,8 +8,9 @@ import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import { MapView } from '@/components/MapView';
 import { Activity, TripSetup, defaultTripSetup } from '@/types/trip';
-import { fetchNextActivity, completeActivity, skipActivity } from '@/services/tripService';
+import { fetchNextActivity, completeActivity, skipActivity, fetchCompletedActivities } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
+import { getCurrentPosition, startTracking, stopTracking } from '@/services/locationService';
 
 export function TripPage() {
   const navigate = useNavigate();
@@ -27,30 +28,48 @@ export function TripPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const initialLoadDone = useRef(false);
 
-  // Fetch browser GPS once on load (controlled by VITE_GPS_ENABLED feature toggle)
+  // Fetch browser GPS once on load and start background tracking
   useEffect(() => {
     if (import.meta.env.VITE_GPS_ENABLED !== 'on') return;
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      },
-      (err) => console.warn('[TripPage] Geolocation failed:', err.message),
-      { enableHighAccuracy: false, timeout: 10000 }
-    );
-  }, []);
+    getCurrentPosition().then((coords) => {
+      if (coords) setUserLocation(coords);
+    });
+    if (tripId) {
+      startTracking(tripId);
+      return () => stopTracking();
+    }
+  }, [tripId]);
 
-  // Load first activity and set user location from backend fallback
+  // Load first activity, completed history, and set user location from backend fallback
   useEffect(() => {
     if (!tripId || initialLoadDone.current) return;
     initialLoadDone.current = true;
     const load = async () => {
       setIsLoading(true);
       try {
-        const result = await fetchNextActivity(tripId);
+        const [result, completed] = await Promise.all([
+          fetchNextActivity(tripId),
+          fetchCompletedActivities(tripId),
+        ]);
         setCurrentActivity(result.activity);
         if (result.userLocation) {
           setUserLocation(prev => prev ?? result.userLocation);
+        }
+        if (completed.length > 0) {
+          setCompletedActivities(completed.map(c => ({
+            id: c.id.toString(),
+            title: c.title,
+            description: c.description ?? '',
+            image: '',
+            rating: c.rating ?? 0,
+            reviewCount: c.review_count ?? 0,
+            estimatedTime: c.estimated_time ?? '',
+            cost: c.cost ?? '',
+            category: c.category ?? 'general',
+            address: c.address ?? '',
+            completed: true,
+            feedback: c.feedback,
+          })));
         }
       } catch (err) {
         console.error('[TripPage] Failed to load activity:', err);
