@@ -28,6 +28,7 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
 
   const hasBothPins = userLat != null && userLng != null;
 
+  // Fetch walking route between user and attraction, render it on the map
   useEffect(() => {
     if (!isLoaded || !hasBothPins) {
       setWalkingMinutes(null);
@@ -38,6 +39,7 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
       return;
     }
 
+    // Retry up to 10 times waiting for map ref to be available
     let retryCount = 0;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
@@ -51,6 +53,7 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
         return;
       }
 
+      // Request walking directions from Google
       const directionsService = new google.maps.DirectionsService();
       directionsService.route(
         {
@@ -64,6 +67,7 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
             if (rendererRef.current) {
               rendererRef.current.setMap(null);
             }
+            // Draw the route polyline on the map
             rendererRef.current = new google.maps.DirectionsRenderer({
               map: mapRef.current!,
               suppressMarkers: true,
@@ -86,6 +90,7 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
 
     tryRoute();
 
+    // Cleanup: cancel pending retries and remove route renderer
     return () => {
       cancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
@@ -96,6 +101,7 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
     };
   }, [isLoaded, attractionLat, attractionLng, userLat, userLng, hasBothPins]);
 
+  // Auto-zoom to fit both pins, or center on attraction if only one pin
   const fitBounds = useCallback(() => {
     if (!mapRef.current) return;
     if (hasBothPins) {
@@ -114,6 +120,7 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
     fitBounds();
   }, [fitBounds]);
 
+  // Re-fit bounds when coordinates change (e.g. user location arrives late)
   useEffect(() => {
     fitBounds();
   }, [fitBounds]);
@@ -143,12 +150,14 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
         streetViewControl: false,
       }}
     >
+      {/* Attraction pin (red default marker) */}
       <MarkerF
         position={{ lat: attractionLat, lng: attractionLng }}
         title={attractionTitle}
       />
       {hasBothPins && (
         <>
+          {/* User location pin (blue circle) */}
           <MarkerF
             position={{ lat: userLat, lng: userLng }}
             title="You"
@@ -161,6 +170,7 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
               strokeWeight: 3,
             }}
           />
+          {/* Walking time badge shown at midpoint of route */}
           {walkingMinutes && midpoint && (
             <OverlayViewF
               position={midpoint}

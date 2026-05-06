@@ -170,6 +170,7 @@ export async function fetchLocations(): Promise<{ id: string, name: string, regi
   }
 }
 
+// Returns next activity + user's last known location (for map pin fallback)
 export interface NextActivityResult {
   activity: Activity | null;
   userLocation: { lat: number; lng: number } | null;

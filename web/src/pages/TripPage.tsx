@@ -27,6 +27,7 @@ export function TripPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const initialLoadDone = useRef(false);
 
+  // Fetch browser GPS once on load (controlled by VITE_GPS_ENABLED feature toggle)
   useEffect(() => {
     if (import.meta.env.VITE_GPS_ENABLED !== 'on') return;
     if (!navigator.geolocation) return;
@@ -39,6 +40,7 @@ export function TripPage() {
     );
   }, []);
 
+  // Load first activity and set user location from backend fallback
   useEffect(() => {
     if (!tripId || initialLoadDone.current) return;
     initialLoadDone.current = true;
@@ -63,6 +65,7 @@ export function TripPage() {
     setShowFeedback(true);
   };
 
+  // Submit feedback, mark activity done, update user location to completed attraction
   const handleFeedbackSubmit = async (feedback: Activity['feedback'], needSpecific?: string) => {
     if (!tripId) {
       setShowFeedback(false);
@@ -76,6 +79,7 @@ export function TripPage() {
         console.error('[TripPage] Failed to complete activity:', err);
       }
       setCompletedActivities(prev => [...prev, { ...currentActivity, completed: true, feedback }]);
+      // Use completed attraction's coords as new user position
       if (currentActivity.lat != null && currentActivity.lng != null) {
         setUserLocation({ lat: currentActivity.lat, lng: currentActivity.lng });
       }
