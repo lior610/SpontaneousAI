@@ -7,7 +7,7 @@ import { FeedbackPopup } from '@/components/FeedbackPopup';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import { Activity, TripSetup, defaultTripSetup } from '@/types/trip';
-import { fetchNextActivity, completeActivity, skipActivity, fetchCompletedActivities } from '@/services/tripService';
+import { fetchNextActivity, completeActivity, skipActivity } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
 
 export function TripPage() {
@@ -30,41 +30,9 @@ export function TripPage() {
     initialLoadDone.current = true;
     const load = async () => {
       setIsLoading(true);
-      try {
-        const cached = sessionStorage.getItem(`trip_${tripId}_current_activity`);
-        let activity: Activity | null = null;
-        if (cached) {
-          activity = JSON.parse(cached) as Activity;
-        } else {
-          activity = await fetchNextActivity(tripId);
-          if (activity) {
-            sessionStorage.setItem(`trip_${tripId}_current_activity`, JSON.stringify(activity));
-          }
-        }
-        setCurrentActivity(activity);
-
-        const completed = await fetchCompletedActivities(tripId);
-        if (completed.length > 0) {
-          setCompletedActivities(completed.map(c => ({
-            id: c.id.toString(),
-            title: c.title,
-            description: c.description ?? '',
-            image: '',
-            rating: c.rating ?? 0,
-            reviewCount: c.review_count ?? 0,
-            estimatedTime: c.estimated_time ?? '',
-            cost: c.cost ?? '',
-            category: c.category ?? 'general',
-            address: c.address ?? '',
-            completed: true,
-            feedback: c.feedback,
-          })));
-        }
-      } catch (err) {
-        console.error('[TripPage] Failed to load:', err);
-      } finally {
-        setIsLoading(false);
-      }
+      const activity = await fetchNextActivity(tripId);
+      setCurrentActivity(activity);
+      setIsLoading(false);
     };
     load();
   }, [tripId]);
@@ -85,13 +53,9 @@ export function TripPage() {
     }
     setShowFeedback(false);
 
-    sessionStorage.removeItem(`trip_${tripId}_current_activity`);
     setIsLoading(true);
     const nextActivity = await fetchNextActivity(tripId, needSpecific);
     setCurrentActivity(nextActivity);
-    if (nextActivity) {
-      sessionStorage.setItem(`trip_${tripId}_current_activity`, JSON.stringify(nextActivity));
-    }
     setIsLoading(false);
   };
 
@@ -211,12 +175,8 @@ export function TripPage() {
                   } catch (e) {
                     console.error('Failed to skip activity:', e);
                   }
-                  sessionStorage.removeItem(`trip_${tripId}_current_activity`);
                   const activity = await fetchNextActivity(tripId);
                   setCurrentActivity(activity);
-                  if (activity) {
-                    sessionStorage.setItem(`trip_${tripId}_current_activity`, JSON.stringify(activity));
-                  }
                   setIsLoading(false);
                 }
               }}
