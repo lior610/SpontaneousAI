@@ -33,7 +33,7 @@ export function TripPage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        // Use cached activity on refresh to avoid advancing the backend batch index
+        // Page refresh: use cached activity to avoid calling next-activity and advancing backend batch index
         const cached = sessionStorage.getItem(ACTIVITY_CACHE_KEY(tripId));
         let activity: Activity | null = null;
         if (cached) {
@@ -88,7 +88,7 @@ export function TripPage() {
     }
     setShowFeedback(false);
 
-    // Clear cache so next fetch advances to a new activity
+    // Activity done: clear cache and fetch next activity from backend
     sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
     setIsLoading(true);
     const nextActivity = await fetchNextActivity(tripId, needSpecific);
@@ -215,7 +215,7 @@ export function TripPage() {
                   } catch (e) {
                     console.error('Failed to skip activity:', e);
                   }
-                  // Invalidate cache so skip fetches a fresh activity from the backend
+                  // Skip/refresh button: clear cache and fetch a different activity from backend
                   sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
                   const activity = await fetchNextActivity(tripId);
                   setCurrentActivity(activity);
