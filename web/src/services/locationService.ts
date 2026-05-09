@@ -24,12 +24,14 @@ export function getCurrentPosition(): Promise<Coords | null> {
   });
 }
 
-// Send current position to backend
+// Send current position to backend (includes user_id for ownership check)
 export async function reportPosition(tripId: number, coords: Coords): Promise<void> {
+  const rawUser = window.localStorage.getItem('currentUser');
+  const userId = rawUser ? JSON.parse(rawUser).id : undefined;
   await fetch(`${API_BASE}/api/trips/${tripId}/location`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(coords),
+    body: JSON.stringify({ ...coords, user_id: userId }),
   });
 }
 
@@ -38,6 +40,8 @@ let trackingInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startTracking(tripId: number, intervalMs = 5 * 60 * 1000): void {
   stopTracking();
+  _trackingTripId = tripId;
+  _trackingIntervalMs = intervalMs;
   const sync = async () => {
     const coords = await getCurrentPosition();
     if (coords) {
@@ -47,7 +51,6 @@ export function startTracking(tripId: number, intervalMs = 5 * 60 * 1000): void 
   sync();
   trackingInterval = setInterval(sync, intervalMs);
 
-  // Pause when tab is hidden, resume when visible
   document.addEventListener('visibilitychange', handleVisibility);
 }
 
@@ -56,12 +59,27 @@ export function stopTracking(): void {
     clearInterval(trackingInterval);
     trackingInterval = null;
   }
+  _trackingTripId = null;
   document.removeEventListener('visibilitychange', handleVisibility);
 }
 
+let _trackingTripId: number | null = null;
+let _trackingIntervalMs = 5 * 60 * 1000;
+
+// Pause GPS polling when tab is hidden, resume when visible again
 function handleVisibility() {
   if (document.hidden && trackingInterval) {
     clearInterval(trackingInterval);
     trackingInterval = null;
+  } else if (!document.hidden && !trackingInterval && _trackingTripId) {
+    const tripId = _trackingTripId;
+    const sync = async () => {
+      const coords = await getCurrentPosition();
+      if (coords) {
+        reportPosition(tripId, coords).catch(() => {});
+      }
+    };
+    sync();
+    trackingInterval = setInterval(sync, _trackingIntervalMs);
   }
 }

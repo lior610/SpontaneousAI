@@ -21,10 +21,6 @@ WEIGHT_DIVERSITY = float(os.getenv("RANKING_WEIGHT_DIVERSITY", "0.05"))
 # Penalties
 CLUSTER_PENALTY_MULTIPLIER = float(os.getenv("RANKING_CLUSTER_PENALTY", "0.5"))
 
-def calculate_haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calculate distance between two points in km."""
-    return haversine(lat1, lon1, lat2, lon2)
-
 class RankingEngine:
     """
     Ranks a pool of candidate attractions based on weighted contextual scores.
@@ -41,7 +37,7 @@ class RankingEngine:
         dist_km = None
         distance_score = 0.0
         if attraction_lat and attraction_lng and user_lat and user_lng:
-            dist_km = calculate_haversine_distance(user_lat, user_lng, attraction_lat, attraction_lng)
+            dist_km = haversine(user_lat, user_lng, attraction_lat, attraction_lng)
             # Max walk constraint - floor at 0 as requested by spec
             distance_score = max(0.0, 1.0 - (dist_km / max(0.1, max_walk_km)))
         return distance_score, dist_km
