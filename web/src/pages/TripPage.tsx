@@ -12,6 +12,8 @@ import { fetchNextActivity, completeActivity, skipActivity, fetchCompletedActivi
 import { clearCurrentUser } from '@/services/authService';
 import { getCurrentPosition, startTracking, stopTracking } from '@/services/locationService';
 
+const ACTIVITY_CACHE_KEY = (id: number) => `trip_${id}_current_activity`;
+
 export function TripPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -47,14 +49,23 @@ export function TripPage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const [result, completed] = await Promise.all([
-          fetchNextActivity(tripId),
-          fetchCompletedActivities(tripId),
-        ]);
-        setCurrentActivity(result.activity);
-        if (result.userLocation) {
-          setUserLocation(prev => prev ?? result.userLocation);
+        const cached = sessionStorage.getItem(ACTIVITY_CACHE_KEY(tripId));
+        let activity: Activity | null = null;
+        if (cached) {
+          activity = JSON.parse(cached) as Activity;
+        } else {
+          const result = await fetchNextActivity(tripId);
+          activity = result.activity;
+          if (result.userLocation) {
+            setUserLocation(prev => prev ?? result.userLocation);
+          }
+          if (activity) {
+            sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(activity));
+          }
         }
+        setCurrentActivity(activity);
+
+        const completed = await fetchCompletedActivities(tripId);
         if (completed.length > 0) {
           setCompletedActivities(completed.map(c => ({
             id: c.id.toString(),
@@ -72,7 +83,7 @@ export function TripPage() {
           })));
         }
       } catch (err) {
-        console.error('[TripPage] Failed to load activity:', err);
+        console.error('[TripPage] Failed to load:', err);
       } finally {
         setIsLoading(false);
       }
@@ -105,12 +116,17 @@ export function TripPage() {
     }
     setShowFeedback(false);
 
+    // Activity done: clear cache and fetch next activity from backend
+    sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
     setIsLoading(true);
     try {
       const result = await fetchNextActivity(tripId, needSpecific);
       setCurrentActivity(result.activity);
       if (result.userLocation) {
         setUserLocation(result.userLocation);
+      }
+      if (result.activity) {
+        sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(result.activity));
       }
     } catch (err) {
       console.error('[TripPage] Failed to fetch next activity:', err);
@@ -219,9 +235,13 @@ export function TripPage() {
                         } catch (e) {
                           console.error('[TripPage] Failed to skip activity:', e);
                         }
+                        sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
                         const result = await fetchNextActivity(tripId);
                         setCurrentActivity(result.activity);
                         if (result.userLocation) setUserLocation(result.userLocation);
+                        if (result.activity) {
+                          sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(result.activity));
+                        }
                       } catch (e) {
                         console.error('[TripPage] Failed to fetch next activity:', e);
                       } finally {
