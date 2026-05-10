@@ -3,6 +3,7 @@
  */
 
 import * as usersDb from '../db/usersConnection.js';
+import * as attractionsDb from '../db/attractionsConnection.js';
 import axios from 'axios';
 import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedding.js';
 import * as locationService from '../services/locationService.js';
@@ -930,11 +931,18 @@ export const getNextActivity = async (req, res) => {
     const specificNeed = req.query.specific_need;
     if (specificNeed) {
       try {
+        // Resolve the correct location_id from the trip's destination
+        const locationResult = await attractionsDb.pool.query(
+          'SELECT id FROM locations WHERE LOWER(name) = LOWER($1)',
+          [trip.destination]
+        );
+        const locationId = locationResult.rows.length > 0 ? locationResult.rows[0].id : 1;
+
         const utilRes = await axios.post(`http://${engineHost}:8000/utilities/closest`, {
           parent_category: specificNeed,
           lat: current_lat,
           lng: current_lng,
-          location_id: 1, // Engine gracefully maps or ignores if lat/lng are ok
+          location_id: locationId,
           current_hour: new Date().getHours(),
           limit: 1
         });
