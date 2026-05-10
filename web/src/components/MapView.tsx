@@ -7,6 +7,7 @@ interface MapViewProps {
   attractionTitle: string;
   userLat?: number;
   userLng?: number;
+  showLocationWarning?: boolean;
 }
 
 const containerStyle = {
@@ -16,7 +17,7 @@ const containerStyle = {
 
 const libraries: ('marker' | 'geometry')[] = ['marker', 'geometry'];
 
-export function MapView({ attractionLat, attractionLng, attractionTitle, userLat, userLng }: MapViewProps) {
+export function MapView({ attractionLat, attractionLng, attractionTitle, userLat, userLng, showLocationWarning }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const rendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
   const [walkingMinutes, setWalkingMinutes] = useState<string | null>(null);
@@ -138,18 +139,38 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
     : null;
 
   return (
-    <GoogleMap
-      mapContainerStyle={containerStyle}
-      center={{ lat: attractionLat, lng: attractionLng }}
-      zoom={14}
-      onLoad={onLoad}
-      options={{
-        disableDefaultUI: true,
-        zoomControl: true,
-        mapTypeControl: false,
-        streetViewControl: false,
-      }}
-    >
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {/* Shown when no real user coords are available (no GPS, no completed activities yet) */}
+      {showLocationWarning && (
+        <div style={{
+          position: 'absolute',
+          top: 8,
+          left: 8,
+          right: 8,
+          zIndex: 10,
+          background: 'rgba(255, 255, 255, 0.92)',
+          borderRadius: '8px',
+          padding: '6px 12px',
+          fontSize: '12px',
+          color: '#6b7280',
+          textAlign: 'center',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
+        }}>
+          Couldn't find recent location
+        </div>
+      )}
+      <GoogleMap
+        mapContainerStyle={containerStyle}
+        center={{ lat: attractionLat, lng: attractionLng }}
+        zoom={14}
+        onLoad={onLoad}
+        options={{
+          disableDefaultUI: true,
+          zoomControl: true,
+          mapTypeControl: false,
+          streetViewControl: false,
+        }}
+      >
       {/* Attraction pin (red default marker) */}
       <MarkerF
         position={{ lat: attractionLat, lng: attractionLng }}
@@ -194,6 +215,7 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
           )}
         </>
       )}
-    </GoogleMap>
+      </GoogleMap>
+    </div>
   );
 }

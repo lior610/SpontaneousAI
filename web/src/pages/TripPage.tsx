@@ -13,6 +13,7 @@ import { clearCurrentUser } from '@/services/authService';
 import { getCurrentPosition, startTracking, stopTracking } from '@/services/locationService';
 
 const ACTIVITY_CACHE_KEY = (id: number) => `trip_${id}_current_activity`;
+const LOCATION_CACHE_KEY = (id: number) => `trip_${id}_user_location`;
 
 export function TripPage() {
   const navigate = useNavigate();
@@ -53,14 +54,19 @@ export function TripPage() {
       setIsLoading(true);
       try {
         const cached = sessionStorage.getItem(ACTIVITY_CACHE_KEY(tripId));
+        const cachedLocation = sessionStorage.getItem(LOCATION_CACHE_KEY(tripId));
         let activity: Activity | null = null;
         if (cached) {
           activity = JSON.parse(cached) as Activity;
+          if (cachedLocation) {
+            setUserLocation(prev => prev ?? JSON.parse(cachedLocation));
+          }
         } else {
           const result = await fetchNextActivity(tripId);
           activity = result.activity;
           if (result.userLocation) {
             setUserLocation(prev => prev ?? result.userLocation);
+            sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(result.userLocation));
           }
           if (activity) {
             sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(activity));
@@ -127,6 +133,7 @@ export function TripPage() {
       setCurrentActivity(result.activity);
       if (result.userLocation) {
         setUserLocation(result.userLocation);
+        sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(result.userLocation));
       }
       if (result.activity) {
         sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(result.activity));
@@ -214,6 +221,7 @@ export function TripPage() {
                   attractionTitle={currentActivity.title}
                   userLat={userLocation?.lat}
                   userLng={userLocation?.lng}
+                  showLocationWarning={!userLocation}
                 />
               </div>
             )}
@@ -241,7 +249,10 @@ export function TripPage() {
                         sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
                         const result = await fetchNextActivity(tripId);
                         setCurrentActivity(result.activity);
-                        if (result.userLocation) setUserLocation(result.userLocation);
+                        if (result.userLocation) {
+                          setUserLocation(result.userLocation);
+                          sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(result.userLocation));
+                        }
                         if (result.activity) {
                           sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(result.activity));
                         }

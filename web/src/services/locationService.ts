@@ -28,11 +28,14 @@ export function getCurrentPosition(): Promise<Coords | null> {
 export async function reportPosition(tripId: number, coords: Coords): Promise<void> {
   const rawUser = window.localStorage.getItem('currentUser');
   const userId = rawUser ? JSON.parse(rawUser).id : undefined;
-  await fetch(`${API_BASE}/api/trips/${tripId}/location`, {
+  const res = await fetch(`${API_BASE}/api/trips/${tripId}/location`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...coords, user_id: userId }),
   });
+  if (!res.ok) {
+    console.warn(`[LocationService] Position update failed: ${res.status}`);
+  }
 }
 
 // Background tracking: periodically fetches GPS and reports to backend

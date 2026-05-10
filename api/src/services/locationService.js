@@ -1,12 +1,6 @@
 // Centralized location management: validation, storage, and retrieval of user positions
 import * as usersDb from '../db/usersConnection.js';
 
-// Default fallback coordinates per destination city
-const CITY_DEFAULTS = {
-  'new york': { lat: 40.7580, lng: -73.9855 },
-  'london': { lat: 51.5237, lng: -0.1585 },
-};
-
 export function validate(lat, lng) {
   const errors = [];
   if (lat == null || isNaN(lat) || lat < -90 || lat > 90) {
@@ -28,10 +22,10 @@ export async function updatePosition(tripId, lat, lng) {
   );
 }
 
-// Get the trip's current position, falling back to city defaults if not set
+// Get the trip's current position, returns null if no coords are set
 export async function getPosition(tripId) {
   const result = await usersDb.query(
-    `SELECT current_lat, current_lng, destination FROM trips WHERE trip_id = $1`,
+    `SELECT current_lat, current_lng FROM trips WHERE trip_id = $1`,
     [tripId]
   );
   if (result.rows.length === 0) return null;
@@ -44,15 +38,5 @@ export async function getPosition(tripId) {
     return { lat, lng };
   }
 
-  return getDefaultForDestination(trip.destination);
-}
-
-// Resolve default coordinates for a destination city
-export function getDefaultForDestination(destination) {
-  if (!destination) return CITY_DEFAULTS['new york'];
-  const key = destination.toLowerCase();
-  for (const [city, coords] of Object.entries(CITY_DEFAULTS)) {
-    if (key.includes(city)) return coords;
-  }
-  return CITY_DEFAULTS['new york'];
+  return null;
 }
