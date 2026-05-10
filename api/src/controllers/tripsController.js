@@ -920,8 +920,8 @@ export const getNextActivity = async (req, res) => {
     const trip = tripCheck.rows[0];
 
     const position = await locationService.getPosition(tripId);
-    const current_lat = position.lat;
-    const current_lng = position.lng;
+    const current_lat = position ? position.lat : null;
+    const current_lng = position ? position.lng : null;
 
     const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
     const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
@@ -958,7 +958,7 @@ export const getNextActivity = async (req, res) => {
               lng: attr.longitude,
               completed: false
             },
-            userLocation: { lat: current_lat, lng: current_lng }
+            userLocation: position ? { lat: current_lat, lng: current_lng } : null
           });
         }
       } catch (err) {
@@ -1019,7 +1019,7 @@ export const getNextActivity = async (req, res) => {
         lng: attr.longitude,
         completed: false
       },
-      userLocation: { lat: current_lat, lng: current_lng },
+      userLocation: position ? { lat: current_lat, lng: current_lng } : null,
       _debug: {
         source: freshBatch || cacheExpired ? 'fresh_batch' : 'cached_batch',
         batchIndex: cached.currentIndex,
