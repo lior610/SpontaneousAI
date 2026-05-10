@@ -6,9 +6,11 @@ import { ActivityCard } from '@/components/ActivityCard';
 import { FeedbackPopup } from '@/components/FeedbackPopup';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { EmptyState } from '@/components/EmptyState';
+import { MapView } from '@/components/MapView';
 import { Activity, TripSetup, defaultTripSetup } from '@/types/trip';
 import { fetchNextActivity, completeActivity, skipActivity, fetchCompletedActivities } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
+import { getCurrentPosition, startTracking, stopTracking } from '@/services/locationService';
 
 const ACTIVITY_CACHE_KEY = (id: number) => `trip_${id}_current_activity`;
 
@@ -25,21 +27,41 @@ export function TripPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const initialLoadDone = useRef(false);
 
+  // Fetch browser GPS once on load
+  useEffect(() => {
+    if (import.meta.env.VITE_GPS_ENABLED !== 'on') return;
+    getCurrentPosition().then((coords) => {
+      if (coords) setUserLocation(coords);
+    });
+  }, []);
+
+  // Periodic background location sync to backend
+  useEffect(() => {
+    if (import.meta.env.VITE_BACKGROUND_TRACKING !== 'on' || !tripId) return;
+    startTracking(tripId);
+    return () => stopTracking();
+  }, [tripId]);
+
+  // Load first activity, completed history, and set user location from backend fallback
   useEffect(() => {
     if (!tripId || initialLoadDone.current) return;
     initialLoadDone.current = true;
     const load = async () => {
       setIsLoading(true);
       try {
-        // Page refresh: use cached activity to avoid calling next-activity and advancing backend batch index
         const cached = sessionStorage.getItem(ACTIVITY_CACHE_KEY(tripId));
         let activity: Activity | null = null;
         if (cached) {
           activity = JSON.parse(cached) as Activity;
         } else {
-          activity = await fetchNextActivity(tripId);
+          const result = await fetchNextActivity(tripId);
+          activity = result.activity;
+          if (result.userLocation) {
+            setUserLocation(prev => prev ?? result.userLocation);
+          }
           if (activity) {
             sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(activity));
           }
@@ -76,6 +98,7 @@ export function TripPage() {
     setShowFeedback(true);
   };
 
+  // Submit feedback, mark activity done, update user location to completed attraction
   const handleFeedbackSubmit = async (feedback: Activity['feedback'], needSpecific?: string) => {
     if (!tripId) {
       setShowFeedback(false);
@@ -83,20 +106,36 @@ export function TripPage() {
     }
 
     if (currentActivity) {
-      await completeActivity(tripId, currentActivity, feedback);
+      try {
+        await completeActivity(tripId, currentActivity, feedback);
+      } catch (err) {
+        console.error('[TripPage] Failed to complete activity:', err);
+      }
       setCompletedActivities(prev => [...prev, { ...currentActivity, completed: true, feedback }]);
+      // Use completed attraction's coords as new user position
+      if (currentActivity.lat != null && currentActivity.lng != null) {
+        setUserLocation({ lat: currentActivity.lat, lng: currentActivity.lng });
+      }
     }
     setShowFeedback(false);
 
     // Activity done: clear cache and fetch next activity from backend
     sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
     setIsLoading(true);
-    const nextActivity = await fetchNextActivity(tripId, needSpecific);
-    setCurrentActivity(nextActivity);
-    if (nextActivity) {
-      sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(nextActivity));
+    try {
+      const result = await fetchNextActivity(tripId, needSpecific);
+      setCurrentActivity(result.activity);
+      if (result.userLocation) {
+        setUserLocation(result.userLocation);
+      }
+      if (result.activity) {
+        sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(result.activity));
+      }
+    } catch (err) {
+      console.error('[TripPage] Failed to fetch next activity:', err);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const handleLogout = () => {
@@ -161,27 +200,75 @@ export function TripPage() {
         </div>
       </header>
 
-      <main className="p-4 max-w-lg mx-auto">
-        {/* Current Activity */}
+      <main className="p-4 max-w-6xl mx-auto">
         {isLoading ? (
           <LoadingSpinner />
         ) : currentActivity ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="px-2 py-1 rounded-full bg-accent/10 text-accent font-medium">Next Up</span>
-              <span>Activity #{completedActivities.length + 1}</span>
+          <div className="flex flex-col lg:flex-row lg:items-stretch gap-4">
+            {/* Map */}
+            {currentActivity.lat != null && currentActivity.lng != null && (
+              <div className="w-full lg:w-1/2 h-[250px] lg:h-auto lg:min-h-[400px] rounded-xl overflow-hidden border">
+                <MapView
+                  attractionLat={currentActivity.lat}
+                  attractionLng={currentActivity.lng}
+                  attractionTitle={currentActivity.title}
+                  userLat={userLocation?.lat}
+                  userLng={userLocation?.lng}
+                />
+              </div>
+            )}
+
+            {/* Card */}
+            <div className="w-full lg:w-1/2 flex flex-col justify-center space-y-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="px-2 py-1 rounded-full bg-accent/10 text-accent font-medium">Next Up</span>
+                <span>Activity #{completedActivities.length + 1}</span>
+              </div>
+              <ActivityCard activity={currentActivity} onComplete={handleActivityComplete} />
+
+              {/* Refresh Button */}
+              <div className="text-center">
+                <button
+                  onClick={async () => {
+                    if (tripId && currentActivity) {
+                      setIsLoading(true);
+                      try {
+                        try {
+                          await skipActivity(tripId, currentActivity.id);
+                        } catch (e) {
+                          console.error('[TripPage] Failed to skip activity:', e);
+                        }
+                        sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
+                        const result = await fetchNextActivity(tripId);
+                        setCurrentActivity(result.activity);
+                        if (result.userLocation) setUserLocation(result.userLocation);
+                        if (result.activity) {
+                          sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(result.activity));
+                        }
+                      } catch (e) {
+                        console.error('[TripPage] Failed to fetch next activity:', e);
+                      } finally {
+                        setIsLoading(false);
+                      }
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 h-9 px-4 rounded-md text-sm font-semibold text-foreground hover:bg-muted transition-all duration-300"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Not feeling it? Get another suggestion
+                </button>
+              </div>
             </div>
-            <ActivityCard activity={currentActivity} onComplete={handleActivityComplete} />
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="max-w-lg mx-auto space-y-6">
             <EmptyState
               title={completedActivities.length > 0 ? "Trip Complete! 🎉" : "No Activities Yet"}
-              description={completedActivities.length > 0 
-                ? "You've explored all the activities we had for you." 
+              description={completedActivities.length > 0
+                ? "You've explored all the activities we had for you."
                 : "Activities will appear here once your trip is planned."}
             />
-            
+
             {/* Trip Summary */}
             <div className="rounded-xl border border-accent/20 bg-gradient-to-br from-card to-accent/5">
               <div className="p-5">
@@ -200,36 +287,6 @@ export function TripPage() {
                 </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Refresh Button */}
-        {!isLoading && currentActivity && (
-          <div className="mt-6 text-center">
-            <button
-              onClick={async () => {
-                if (tripId && currentActivity) {
-                  setIsLoading(true);
-                  try {
-                    await skipActivity(tripId, currentActivity.id);
-                  } catch (e) {
-                    console.error('Failed to skip activity:', e);
-                  }
-                  // Skip/refresh button: clear cache and fetch a different activity from backend
-                  sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
-                  const activity = await fetchNextActivity(tripId);
-                  setCurrentActivity(activity);
-                  if (activity) {
-                    sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(activity));
-                  }
-                  setIsLoading(false);
-                }
-              }}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-md text-sm font-semibold text-foreground hover:bg-muted transition-all duration-300"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Not feeling it? Get another suggestion
-            </button>
           </div>
         )}
       </main>

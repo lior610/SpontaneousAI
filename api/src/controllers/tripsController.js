@@ -5,6 +5,7 @@
 import * as usersDb from '../db/usersConnection.js';
 import axios from 'axios';
 import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedding.js';
+import * as locationService from '../services/locationService.js';
 
 // In-memory cache to hold arrays of recommendations returned by the Engine
 const tripRecommendationsCache = new Map();
@@ -831,7 +832,7 @@ export const completeTripActivity = async (req, res) => {
     }
 
     if (lat != null && lng != null) {
-      await usersDb.query(`UPDATE trips SET current_lat = $1, current_lng = $2 WHERE trip_id = $3`, [lat, lng, tripId]);
+      await locationService.updatePosition(tripId, parseFloat(lat), parseFloat(lng));
     }
 
     // Invalidate the recommendation cache so the next getNextActivity fetches a
@@ -918,16 +919,9 @@ export const getNextActivity = async (req, res) => {
     if (tripCheck.rowCount === 0) return res.status(404).json({ error: 'Trip not found' });
     const trip = tripCheck.rows[0];
 
-    // Determine coords
-    let current_lat = trip.current_lat != null ? parseFloat(trip.current_lat) : null;
-    let current_lng = trip.current_lng != null ? parseFloat(trip.current_lng) : null;
-    if (current_lat === null || current_lng === null) {
-      if (trip.destination && trip.destination.toLowerCase() === 'new york') {
-        current_lat = 40.7580; current_lng = -73.9855;
-      } else {
-        current_lat = 51.5237; current_lng = -0.1585;
-      }
-    }
+    const position = await locationService.getPosition(tripId);
+    const current_lat = position.lat;
+    const current_lng = position.lng;
 
     const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
     const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
@@ -963,7 +957,8 @@ export const getNextActivity = async (req, res) => {
               lat: attr.latitude,
               lng: attr.longitude,
               completed: false
-            }
+            },
+            userLocation: { lat: current_lat, lng: current_lng }
           });
         }
       } catch (err) {
@@ -1024,6 +1019,7 @@ export const getNextActivity = async (req, res) => {
         lng: attr.longitude,
         completed: false
       },
+      userLocation: { lat: current_lat, lng: current_lng },
       _debug: {
         source: freshBatch || cacheExpired ? 'fresh_batch' : 'cached_batch',
         batchIndex: cached.currentIndex,

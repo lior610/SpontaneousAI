@@ -6,6 +6,7 @@ import re
 from db.attractionsConnection import get_db_connection
 from src.db.utility_queries import execute_closest_utility_query
 from models.attraction import AttractionResponse
+from src.services.geo_utils import haversine
 
 # Mapping from parent to exact DB categories (Type = utility)
 UTILITY_CATEGORY_MAP = {
@@ -41,20 +42,6 @@ async def get_closest_utilities(
             limit=query_limit
         )
         
-        import math
-        
-        def haversine(lat1, lon1, lat2, lon2):
-            R = 6371.0 # Earth radius in kilometers
-            phi1 = math.radians(lat1)
-            phi2 = math.radians(lat2)
-            delta_phi = math.radians(lat2 - lat1)
-            delta_lambda = math.radians(lon2 - lon1)
-            a = math.sin(delta_phi / 2.0) ** 2 + \
-                math.cos(phi1) * math.cos(phi2) * \
-                math.sin(delta_lambda / 2.0) ** 2
-            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-            return R * c
-            
         results = []
         for row in rows:
             record = dict(zip(cols, row))

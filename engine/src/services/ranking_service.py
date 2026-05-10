@@ -5,9 +5,10 @@ Applies distance, opening hours, budget, and categorical diversity
 filters dynamically on top of the vector similarity score.
 """
 
-import math
 import os
 from typing import List, Dict, Any, Optional
+
+from src.services.geo_utils import haversine
 
 # Scoring weights (must sum to 1.0 ideally)
 WEIGHT_SEMANTIC = float(os.getenv("RANKING_WEIGHT_SEMANTIC", "0.35"))
@@ -19,22 +20,6 @@ WEIGHT_DIVERSITY = float(os.getenv("RANKING_WEIGHT_DIVERSITY", "0.05"))
 
 # Penalties
 CLUSTER_PENALTY_MULTIPLIER = float(os.getenv("RANKING_CLUSTER_PENALTY", "0.5"))
-
-def calculate_haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calculate distance between two points in km."""
-    R = 6371.0  # Earth radius in kilometers
-
-    lat1_rad = math.radians(lat1)
-    lon1_rad = math.radians(lon1)
-    lat2_rad = math.radians(lat2)
-    lon2_rad = math.radians(lon2)
-
-    dlon = lon2_rad - lon1_rad
-    dlat = lat2_rad - lat1_rad
-
-    a = math.sin(dlat / 2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c
 
 class RankingEngine:
     """
@@ -52,7 +37,7 @@ class RankingEngine:
         dist_km = None
         distance_score = 0.0
         if attraction_lat and attraction_lng and user_lat and user_lng:
-            dist_km = calculate_haversine_distance(user_lat, user_lng, attraction_lat, attraction_lng)
+            dist_km = haversine(user_lat, user_lng, attraction_lat, attraction_lng)
             # Max walk constraint - floor at 0 as requested by spec
             distance_score = max(0.0, 1.0 - (dist_km / max(0.1, max_walk_km)))
         return distance_score, dist_km

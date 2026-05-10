@@ -6,6 +6,7 @@ desktop.ini
 ### Node / JavaScript / React
 # dependencies
 node_modules/
+.claude/**
 
 # logs
 npm-debug.log*
@@ -88,3 +89,4 @@ logs/
 # yarn.lock
 # pnpm-lock.yaml
 .agents/**
+.claude/settings.local.json

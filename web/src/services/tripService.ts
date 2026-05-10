@@ -170,20 +170,29 @@ export async function fetchLocations(): Promise<{ id: string, name: string, regi
   }
 }
 
-export async function fetchNextActivity(tripId?: number, specificNeed?: string): Promise<Activity | null> {
-  if (!tripId) return null;
-  const url = specificNeed 
+// Returns next activity + user's last known location (for map pin fallback)
+export interface NextActivityResult {
+  activity: Activity | null;
+  userLocation: { lat: number; lng: number } | null;
+}
+
+export async function fetchNextActivity(tripId?: number, specificNeed?: string): Promise<NextActivityResult> {
+  if (!tripId) return { activity: null, userLocation: null };
+  const url = specificNeed
     ? `${API_BASE}/api/trips/${tripId}/next-activity?specific_need=${encodeURIComponent(specificNeed)}`
     : `${API_BASE}/api/trips/${tripId}/next-activity`;
-    
+
   const res = await fetch(url);
   if (!res.ok) {
-    if (res.status === 404) return null; // Depleted
+    if (res.status === 404) return { activity: null, userLocation: null };
     const text = await res.text().catch(() => '');
     throw new Error(`Failed to fetch next activity (${res.status}): ${text || res.statusText}`);
   }
   const data = await res.json();
-  return data.activity || null;
+  return {
+    activity: data.activity || null,
+    userLocation: data.userLocation || null,
+  };
 }
 
 export async function completeActivity(
