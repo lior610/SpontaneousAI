@@ -22,7 +22,7 @@ export async function updatePosition(tripId, lat, lng) {
   );
 }
 
-// Get the trip's current position, falling back to city defaults if not set
+// Get the trip's current position, returns null if no coords are set
 export async function getPosition(tripId) {
   const result = await usersDb.query(
     `SELECT current_lat, current_lng FROM trips WHERE trip_id = $1`,
