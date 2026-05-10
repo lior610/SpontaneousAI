@@ -30,16 +30,19 @@ export function TripPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const initialLoadDone = useRef(false);
 
-  // Fetch browser GPS once on load and start background tracking
+  // Fetch browser GPS once on load
   useEffect(() => {
     if (import.meta.env.VITE_GPS_ENABLED !== 'on') return;
     getCurrentPosition().then((coords) => {
       if (coords) setUserLocation(coords);
     });
-    if (tripId) {
-      startTracking(tripId);
-      return () => stopTracking();
-    }
+  }, []);
+
+  // Periodic background location sync to backend
+  useEffect(() => {
+    if (import.meta.env.VITE_BACKGROUND_TRACKING !== 'on' || !tripId) return;
+    startTracking(tripId);
+    return () => stopTracking();
   }, [tripId]);
 
   // Load first activity, completed history, and set user location from backend fallback
