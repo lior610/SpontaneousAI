@@ -1,12 +1,13 @@
 """
-Database Query Layer for Cluster-Diverse Vector Search.
+Cluster-Diverse Vector Search.
 
-Provides optimized single-query retrieval of the top N attractions per geographic
-cluster based on vector similarity.
+Single-query retrieval of the top N attractions per geographic cluster,
+ranked by similarity to the user's preference vector.
 """
 from typing import List, Tuple, Optional, Any, Dict
-import json
 import math
+
+from src.services.utility_service import UTILITY_CATEGORY_MAP
 
 
 def execute_cluster_similarity_query(
@@ -23,29 +24,20 @@ def execute_cluster_similarity_query(
     current_hour: Optional[int] = None
 ) -> Tuple[List[Dict[str, Any]], List[str]]:
     """
-    Query vector space and group mathematically by location_cluster_id.
-    
-    Uses PostgreSQL Window Functions to find the most semantically similar
-    attractions per geographic cluster in a single roundtrip.
-    
-    Args:
-        conn: psycopg2 connection
-        location_id: The ID of the current location/city
-        embedding_str: User's preference vector as a pgvector string
-        excluded_place_ids: List of place_ids the user has already interacted with
-        top_per_cluster: Max number of attractions to return per cluster
-        max_clusters: Max number of distinct clusters to return
-        filters: Hard filters to apply at the SQL level (e.g. is_open)
-        
-    Returns:
-        List of database row tuples, List of column names
+    Returns (rows, column_names) of the best-matching attractions grouped by cluster.
+
+    How it works:
+      1. Score all attractions by cosine distance to user's preference vector
+      2. Rank within each geographic cluster (ROW_NUMBER partitioned by cluster)
+      3. Pick the top N per cluster, from the top M clusters overall
+      Result: diverse recommendations spread across different neighborhoods.
     """
-    
-    # Base CTE uses pgvector <=> operator to calculate distance
-    # and ROW_NUMBER to rank attractions within each cluster by distance
+
+    # pgvector's <=> is cosine distance (0 = identical, 2 = opposite)
+    # ROW_NUMBER ranks attractions within each cluster by how close they are to preferences
     query = """
     WITH RankedAttractions AS (
-        SELECT 
+        SELECT
             place_id as activity_id,
             source,
             place_id,
@@ -72,7 +64,7 @@ def execute_cluster_similarity_query(
             (1 - (embedding <=> %s::vector) / 2) as similarity,
             (embedding <=> %s::vector) as distance,
             ROW_NUMBER() OVER(
-                PARTITION BY location_cluster_id 
+                PARTITION BY location_cluster_id
                 ORDER BY embedding <=> %s::vector
             ) as cluster_rank
         FROM attractions
@@ -80,76 +72,97 @@ def execute_cluster_similarity_query(
           AND embedding IS NOT NULL
           AND type != 'utility'
     """
-    
+
     params: List[Any] = [embedding_str, embedding_str, embedding_str, location_id]
-    
-    # 1. Geographic Pre-Filtering (Bounding Box with 1.5x Soft Boundary)
-    # 1 degree latitude = ~111.045 km
+
+    # Bounding box: only consider attractions within walking distance.
+    # Rectangular approximation — corners can be up to max_walk_km * sqrt(2).
     if user_lat is not None and user_lng is not None and max_walk_km is not None:
         soft_limit_km = max_walk_km * 1.0
-        
-        lat_offset = soft_limit_km / 111.045
+
+        lat_offset = soft_limit_km / 111.045  # 1 degree lat ≈ 111 km
         min_lat = user_lat - lat_offset
         max_lat = user_lat + lat_offset
-        
-        # Longitude distance varies by latitude
-        # 1 degree longitude = ~111.045 * cos(latitude)
+
+        # longitude degrees shrink toward the poles
         lng_offset = soft_limit_km / (111.045 * math.cos(math.radians(user_lat)))
         min_lng = user_lng - lng_offset
         max_lng = user_lng + lng_offset
-        
+
         query += """
           AND latitude BETWEEN %s AND %s
           AND longitude BETWEEN %s AND %s
         """
         params.extend([min_lat, max_lat, min_lng, max_lng])
-        
-    # 2. Hours Pre-Filtering (Only retrieve items open right now)
+
+    # Only show places that are open now.
     if current_hour is not None:
         query += """
           AND (
-            hours IS NULL 
-            OR hours = '' 
-            OR hours = '00:00-23:59' 
+            hours IS NULL
+            OR hours = ''
+            OR hours = '00:00-23:59'
             OR (
-                -- Only attempt to mathematically parse if it perfectly matches HH:MM-HH:MM
                 hours ~ '^\d{1,2}:\d{2}-\d{1,2}:\d{2}$'
                 AND (
                     (
-                        -- Standard daytime hours (e.g. 09:00-18:00)
                         CAST(SPLIT_PART(SPLIT_PART(hours, '-', 1), ':', 1) AS INTEGER) <= CAST(SPLIT_PART(SPLIT_PART(hours, '-', 2), ':', 1) AS INTEGER)
                         AND %s >= CAST(SPLIT_PART(SPLIT_PART(hours, '-', 1), ':', 1) AS INTEGER)
                         AND %s < CAST(SPLIT_PART(SPLIT_PART(hours, '-', 2), ':', 1) AS INTEGER)
                     )
                     OR (
-                        -- Handling Overnight hours (e.g. 22:00-02:00)
+                        -- overnight range like 22:00-02:00
                         CAST(SPLIT_PART(SPLIT_PART(hours, '-', 1), ':', 1) AS INTEGER) > CAST(SPLIT_PART(SPLIT_PART(hours, '-', 2), ':', 1) AS INTEGER)
                         AND (%s >= CAST(SPLIT_PART(SPLIT_PART(hours, '-', 1), ':', 1) AS INTEGER) OR %s < CAST(SPLIT_PART(SPLIT_PART(hours, '-', 2), ':', 1) AS INTEGER))
                     )
                 )
             )
-            OR hours !~ '^\d{1,2}:\d{2}-\d{1,2}:\d{2}$' -- If the string is unpredictable (e.g. "12 PM"), default to letting it pass and let Python handle it
+            OR hours !~ '^\d{1,2}:\d{2}-\d{1,2}:\d{2}$'
           )
         """
         params.extend([current_hour, current_hour, current_hour, current_hour])
-    
+
+    # Don't resurface places the user already liked/skipped/visited
     if excluded_place_ids:
-        # Prevent re-surfacing attractions the user has liked/skipped/visited this trip
         placeholders = ', '.join(['%s'] * len(excluded_place_ids))
         query += f" AND place_id NOT IN ({placeholders})"
         params.extend(excluded_place_ids)
-        
-    # Apply additional hard filters if present
+
+    # Food places only appear via the food intercept layer, never in regular recs.
+    # Matches an explicit list + anything with "restaurant" in the category name.
+    food_categories = UTILITY_CATEGORY_MAP['food']
+    if filters is not None and filters.get('category_filter') == 'food':
+        query += """
+          AND (
+            categories && %s::text[]
+            OR EXISTS (SELECT 1 FROM unnest(categories) AS cat WHERE LOWER(cat) LIKE '%%restaurant%%')
+          )
+        """
+        params.append(food_categories)
+    else:
+        query += """
+          AND NOT (
+            categories && %s::text[]
+            OR EXISTS (SELECT 1 FROM unnest(categories) AS cat WHERE LOWER(cat) LIKE '%%restaurant%%')
+          )
+        """
+        params.append(food_categories)
+
+    # Any extra column-level filters passed from the API (e.g. budget, type)
     if filters:
         for column_name, filter_value in filters.items():
-            if filter_value is None:
+            if filter_value is None or column_name == 'category_filter':
                 continue
             if isinstance(filter_value, bool):
                 query += f" AND {column_name} = {'TRUE' if filter_value else 'FALSE'}"
             else:
                 query += f" AND {column_name} = %s"
                 params.append(filter_value)
-                
+
+    # ClusterMins: finds the single best attraction per cluster ("cluster champion").
+    # FinalRanking: ranks clusters by their champion's distance to user preferences.
+    # Final SELECT: keeps top_per_cluster from each of the top max_clusters.
+    # Example: 5 clusters × 5 per cluster = up to 25 results per batch.
     query += """
     ),
     ClusterMins AS (
@@ -170,11 +183,11 @@ def execute_cluster_similarity_query(
     ORDER BY cluster_score_rank, cluster_rank;
     """
     params.extend([top_per_cluster, max_clusters])
-    
+
     cursor = conn.cursor()
     cursor.execute(query, tuple(params))
     rows = cursor.fetchall()
     column_names = [desc[0] for desc in cursor.description]
     cursor.close()
-    
+
     return rows, column_names

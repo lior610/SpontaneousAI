@@ -3,9 +3,25 @@
  */
 
 import * as usersDb from '../db/usersConnection.js';
+import { pool as attractionsDb } from '../db/attractionsConnection.js';
 import axios from 'axios';
 import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedding.js';
 import * as locationService from '../services/locationService.js';
+import { checkFoodIntercept, dismissFoodSuggestion, getNextFoodSuggestion } from '../services/foodInterceptService.js';
+
+// Maps a destination name to its location_id in the attractions DB.
+// Falls back to 1 (first seeded city) if lookup fails.
+async function resolveLocationId(destination) {
+  try {
+    const { rows } = await attractionsDb.query(
+      `SELECT id FROM locations WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [destination]
+    );
+    return rows.length > 0 ? rows[0].id : 1;
+  } catch {
+    return 1;
+  }
+}
 
 // In-memory cache to hold arrays of recommendations returned by the Engine
 const tripRecommendationsCache = new Map();
@@ -923,18 +939,31 @@ export const getNextActivity = async (req, res) => {
     const current_lat = position ? position.lat : null;
     const current_lng = position ? position.lng : null;
 
+    // Food intercept runs before normal recs — own try/catch so failures never block the flow
+    const specificNeed = req.query.specific_need;
+    if (!specificNeed) {
+      try {
+        const foodResult = await checkFoodIntercept(tripId, trip, position);
+        if (foodResult.triggered) {
+          return res.json(foodResult.foodCard);
+        }
+      } catch (err) {
+        console.error('[FoodIntercept] Unexpected error, skipping:', err.message);
+      }
+    }
+
     const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
     const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
 
-    // Handle specific Utility Needs bypassing cache
-    const specificNeed = req.query.specific_need;
+    // Utility needs (pharmacy, grocery, etc.) bypass the recommendation cache entirely
     if (specificNeed) {
       try {
+        const locationId = await resolveLocationId(trip.destination);
         const utilRes = await axios.post(`http://${engineHost}:8000/utilities/closest`, {
           parent_category: specificNeed,
           lat: current_lat,
           lng: current_lng,
-          location_id: 1, // Engine gracefully maps or ignores if lat/lng are ok
+          location_id: locationId,
           current_hour: new Date().getHours(),
           limit: 1
         });
@@ -966,7 +995,7 @@ export const getNextActivity = async (req, res) => {
       }
     }
 
-    // Standard cached recommendation flow
+    // Serve from cached batch or fetch a new one from the engine (up to 25 at a time)
     let cached = tripRecommendationsCache.get(tripId);
     const cacheExpired = cached && (Date.now() - cached.fetchedAt > CACHE_TTL_MS);
     if (cacheExpired) {
@@ -1059,6 +1088,37 @@ export const skipTripActivity = async (req, res) => {
 
     res.json({ message: 'Activity skipped' });
   } catch(error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const dismissFoodIntercept = async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.id, 10);
+    if (isNaN(tripId) || tripId <= 0) return res.status(400).json({ error: 'Invalid trip ID' });
+
+    dismissFoodSuggestion(tripId);
+    const cooldownMs = parseInt(process.env.FOOD_COOLDOWN_MS || '3600000', 10);
+    res.json({ ok: true, cooldown_until: new Date(Date.now() + cooldownMs).toISOString() });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const nextFoodSuggestion = async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.id, 10);
+    if (isNaN(tripId) || tripId <= 0) return res.status(400).json({ error: 'Invalid trip ID' });
+
+    const position = await locationService.getPosition(tripId);
+    const foodCard = getNextFoodSuggestion(tripId, position);
+
+    if (!foodCard) {
+      return res.status(404).json({ error: 'No more food suggestions available' });
+    }
+
+    res.json(foodCard);
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };

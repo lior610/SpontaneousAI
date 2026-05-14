@@ -170,11 +170,7 @@ export async function fetchLocations(): Promise<{ id: string, name: string, regi
   }
 }
 
-// Returns next activity + user's last known location (for map pin fallback)
-export interface NextActivityResult {
-  activity: Activity | null;
-  userLocation: { lat: number; lng: number } | null;
-}
+export type { NextActivityResponse as NextActivityResult } from '@/types/trip';
 
 export async function fetchNextActivity(tripId?: number, specificNeed?: string): Promise<NextActivityResult> {
   if (!tripId) return { activity: null, userLocation: null };
@@ -192,6 +188,8 @@ export async function fetchNextActivity(tripId?: number, specificNeed?: string):
   return {
     activity: data.activity || null,
     userLocation: data.userLocation || null,
+    card_type: data.card_type,
+    intercept_metadata: data.intercept_metadata,
   };
 }
 
@@ -239,6 +237,35 @@ export async function skipActivity(tripId: number, placeId: string): Promise<voi
     const text = await res.text().catch(() => '');
     throw new Error(`Failed to skip activity (${res.status}): ${text || res.statusText}`);
   }
+}
+
+export async function dismissFoodIntercept(tripId: number): Promise<void> {
+  if (!tripId) return;
+  const res = await fetch(`${API_BASE}/api/trips/${tripId}/food-intercept/dismiss`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Failed to dismiss food intercept (${res.status}): ${text || res.statusText}`);
+  }
+}
+
+export async function fetchNextFoodSuggestion(tripId: number): Promise<NextActivityResult> {
+  if (!tripId) return { activity: null, userLocation: null };
+  const res = await fetch(`${API_BASE}/api/trips/${tripId}/food-intercept/next`);
+  if (!res.ok) {
+    if (res.status === 404) return { activity: null, userLocation: null };
+    const text = await res.text().catch(() => '');
+    throw new Error(`Failed to fetch next food suggestion (${res.status}): ${text || res.statusText}`);
+  }
+  const data = await res.json();
+  return {
+    activity: data.activity || null,
+    userLocation: data.userLocation || null,
+    card_type: data.card_type,
+    intercept_metadata: data.intercept_metadata,
+  };
 }
 
 export interface CompletedActivityLog {

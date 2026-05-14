@@ -7,8 +7,8 @@ import { FeedbackPopup } from '@/components/FeedbackPopup';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import { MapView } from '@/components/MapView';
-import { Activity, TripSetup, defaultTripSetup } from '@/types/trip';
-import { fetchNextActivity, completeActivity, skipActivity, fetchCompletedActivities } from '@/services/tripService';
+import { Activity, TripSetup, defaultTripSetup, NextActivityResponse } from '@/types/trip';
+import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchCompletedActivities } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
 import { getCurrentPosition, startTracking, stopTracking } from '@/services/locationService';
 
@@ -29,6 +29,7 @@ export function TripPage() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [isFoodIntercept, setIsFoodIntercept] = useState(false);
   const initialLoadDone = useRef(false);
 
   // Fetch browser GPS once on load
@@ -64,6 +65,7 @@ export function TripPage() {
         } else {
           const result = await fetchNextActivity(tripId);
           activity = result.activity;
+          setIsFoodIntercept(result.card_type === 'food_intercept');
           if (result.userLocation) {
             setUserLocation(prev => prev ?? result.userLocation);
             sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(result.userLocation));
@@ -125,21 +127,62 @@ export function TripPage() {
     }
     setShowFeedback(false);
 
-    // Activity done: clear cache and fetch next activity from backend
     sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
     setIsLoading(true);
     try {
       const result = await fetchNextActivity(tripId, needSpecific);
-      setCurrentActivity(result.activity);
-      if (result.userLocation) {
-        setUserLocation(result.userLocation);
-        sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(result.userLocation));
-      }
-      if (result.activity) {
-        sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(result.activity));
-      }
+      applyActivityResult(result);
     } catch (err) {
       console.error('[TripPage] Failed to fetch next activity:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Shared state update for any "next activity" response (regular or food intercept)
+  const applyActivityResult = (result: NextActivityResponse) => {
+    setCurrentActivity(result.activity);
+    setIsFoodIntercept(result.card_type === 'food_intercept');
+    if (result.userLocation) {
+      setUserLocation(result.userLocation);
+      if (tripId) sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(result.userLocation));
+    }
+    if (result.activity && tripId) {
+      sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(result.activity));
+    }
+  };
+
+  // Cycles through the cached food batch (next restaurant from the same engine call)
+  const handleRefreshFood = async () => {
+    if (!tripId) return;
+    setIsLoading(true);
+    try {
+      const result = await fetchNextFoodSuggestion(tripId);
+      if (result.activity) applyActivityResult(result);
+    } catch (e) {
+      console.error('[TripPage] Failed to fetch different restaurant:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Dismiss food (starts cooldown) or skip regular activity, then fetch next
+  const handleSkipOrDismiss = async () => {
+    if (!tripId || !currentActivity) return;
+    setIsLoading(true);
+    try {
+      if (isFoodIntercept) {
+        await dismissFoodIntercept(tripId);
+      } else {
+        await skipActivity(tripId, currentActivity.id).catch(e =>
+          console.error('[TripPage] Failed to skip activity:', e)
+        );
+      }
+      sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
+      const result = await fetchNextActivity(tripId);
+      applyActivityResult(result);
+    } catch (e) {
+      console.error('[TripPage] Failed to fetch next activity:', e);
     } finally {
       setIsLoading(false);
     }
@@ -229,44 +272,32 @@ export function TripPage() {
             {/* Card */}
             <div className="w-full lg:w-1/2 flex flex-col justify-center space-y-4">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="px-2 py-1 rounded-full bg-accent/10 text-accent font-medium">Next Up</span>
+                {isFoodIntercept ? (
+                  <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 font-medium">Food Break</span>
+                ) : (
+                  <span className="px-2 py-1 rounded-full bg-accent/10 text-accent font-medium">Next Up</span>
+                )}
                 <span>Activity #{completedActivities.length + 1}</span>
               </div>
               <ActivityCard activity={currentActivity} onComplete={handleActivityComplete} />
 
-              {/* Refresh Button */}
-              <div className="text-center">
+              {/* Refresh / Dismiss Buttons */}
+              <div className="text-center space-y-2">
+                {isFoodIntercept && (
+                  <button
+                    onClick={handleRefreshFood}
+                    className="inline-flex items-center gap-2 h-9 px-4 rounded-md text-sm font-semibold text-foreground hover:bg-muted transition-all duration-300"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Suggest a different restaurant
+                  </button>
+                )}
                 <button
-                  onClick={async () => {
-                    if (tripId && currentActivity) {
-                      setIsLoading(true);
-                      try {
-                        try {
-                          await skipActivity(tripId, currentActivity.id);
-                        } catch (e) {
-                          console.error('[TripPage] Failed to skip activity:', e);
-                        }
-                        sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
-                        const result = await fetchNextActivity(tripId);
-                        setCurrentActivity(result.activity);
-                        if (result.userLocation) {
-                          setUserLocation(result.userLocation);
-                          sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(result.userLocation));
-                        }
-                        if (result.activity) {
-                          sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(result.activity));
-                        }
-                      } catch (e) {
-                        console.error('[TripPage] Failed to fetch next activity:', e);
-                      } finally {
-                        setIsLoading(false);
-                      }
-                    }
-                  }}
+                  onClick={handleSkipOrDismiss}
                   className="inline-flex items-center gap-2 h-9 px-4 rounded-md text-sm font-semibold text-foreground hover:bg-muted transition-all duration-300"
                 >
                   <RefreshCw className="w-4 h-4" />
-                  Not feeling it? Get another suggestion
+                  {isFoodIntercept ? 'Not hungry? Skip food break' : 'Not feeling it? Get another suggestion'}
                 </button>
               </div>
             </div>

@@ -52,6 +52,19 @@ export interface Activity {
   };
 }
 
+export interface InterceptMetadata {
+  reason: string;
+  dismissable: boolean;
+  cooldown_minutes: number;
+}
+
+export interface NextActivityResponse {
+  activity: Activity | null;
+  userLocation: { lat: number; lng: number } | null;
+  card_type?: 'food_intercept' | 'regular';
+  intercept_metadata?: InterceptMetadata;
+}
+
 export const defaultPreferences: TripPreferences = {
   food: 50,
   nature: 50,

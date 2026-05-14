@@ -14,6 +14,7 @@ from src.services.preference_service import PreferenceComposer
 from src.services.cluster_retrieval import ClusterRetrievalService
 from src.services.ranking_service import RankingEngine
 from src.services.feedback_service import FeedbackService
+from db.attractionsConnection import get_db_connection as get_attr_conn
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,8 @@ async def get_recommendations(req: RecommendationRequest):
         
         # 2. Extract Hard Filters
         filters = {}
-        # if req.context and req.context.get('is_open'):
-        #     filters['hours'] = ...
+        if req.category_filter:
+            filters['category_filter'] = req.category_filter
         
         user_lat = req.current_location.get('lat') if req.current_location else None
         user_lng = req.current_location.get('lng') if req.current_location else None
@@ -53,27 +54,26 @@ async def get_recommendations(req: RecommendationRequest):
             from db.usersConnection import get_db_connection as get_users_conn
             from src.db.feedback_queries import get_excluded_place_ids
             from src.db.user_queries import get_trip, get_user
-            from db.attractionsConnection import get_db_connection as get_attr_conn
             from src.db.feedback_queries import get_attraction_categories
-            
+
             with get_users_conn() as users_conn:
                 excluded_ids = list(get_excluded_place_ids(users_conn, req.trip_id))
                 trip_data = get_trip(users_conn, req.trip_id)
                 user_data = get_user(users_conn, req.user_id)
-                
+
             if not trip_data or not user_data:
                 raise HTTPException(status_code=404, detail="Trip or User not found in database.")
-                
+
             db_travel_style = user_data.get('travel_style')
             db_max_walk_km = trip_data.get('max_walking_distance')
             if not db_travel_style or db_max_walk_km is None:
                 raise HTTPException(status_code=500, detail="Missing travel_style or max_walking_distance in database.")
             db_max_walk_km = float(db_max_walk_km)
-            
+
             dest = trip_data.get("destination")
             if not dest:
                 raise HTTPException(status_code=500, detail="Missing destination in database.")
-                
+
             with get_attr_conn() as attr_conn:
                 cursor = attr_conn.cursor()
                 cursor.execute("SELECT id, timezone FROM locations WHERE LOWER(name) = LOWER(%s)", (dest,))

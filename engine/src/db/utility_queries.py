@@ -1,7 +1,9 @@
 """
-Database Query Layer for Immediate Need Utilities.
+Utility Queries — finds the nearest place matching a category (pharmacy, grocery, food, etc.)
+sorted by approximate Euclidean distance (good enough for short-range within a city).
 """
 from typing import List, Tuple, Optional, Any, Dict
+
 
 def execute_closest_utility_query(
     conn,
@@ -10,17 +12,19 @@ def execute_closest_utility_query(
     lng: float,
     location_id: int,
     current_hour: Optional[int] = None,
-    limit: int = 5
+    limit: int = 5,
+    type_filter: str = 'utility'
 ) -> Tuple[List[Dict[str, Any]], List[str]]:
     """
-    Finds the closest utilities (e.g. pharmacies, hospitals) by exact category match,
-    ordered by geometric distance (latitude/longitude approximation) within a given location_id.
+    Finds nearest places by category, ordered by distance.
+    type_filter controls whether we search utility-type or attraction-type rows
+    (food uses 'attraction' since restaurants aren't utilities in the DB).
     """
     import math
     cos_lat = math.cos(math.radians(lat))
 
     query = """
-        SELECT 
+        SELECT
             place_id as activity_id,
             source,
             place_id,
@@ -44,10 +48,10 @@ def execute_closest_utility_query(
             created_at,
             ((latitude - %s) * (latitude - %s) + ((longitude - %s) * %s) * ((longitude - %s) * %s)) as distance_sq
         FROM attractions
-        WHERE type = 'utility'
+        WHERE type = %s
         AND location_id = %s
     """
-    params: List[Any] = [lat, lat, lng, cos_lat, lng, cos_lat, location_id]
+    params: List[Any] = [lat, lat, lng, cos_lat, lng, cos_lat, type_filter, location_id]
 
     # Category Array Intersection
     if categories:
