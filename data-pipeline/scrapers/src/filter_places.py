@@ -24,25 +24,30 @@ logger = logging.getLogger(__name__)
 
 ATTRACTION_KEYWORDS = [
     # Food
-    "Pizza", "Restaurant", "Bakery", "Cafe", "Coffee", "Deli", "Donut", "Sandwich",
-    "Steakhouse", "Burger", "Sushi", "Breakfast", "Diner", "Seafood", "Bagel",
-    "Noodle", "Ramen", "Taco", "Burrito", "BBQ", "Wings", "Dumpling",
-    "Ice Cream", "Dessert", "Yogurt", "Chocolate", "Candy",
-    
+    "Pizza", "Pizzeria", "Restaurant", "Bakery", "Cafe", "Café", "Coffee", "Deli",
+    "Donut", "Sandwich", "Steakhouse", "Burger", "Sushi", "Breakfast", "Diner",
+    "Seafood", "Bagel", "Noodle", "Ramen", "Taco", "Burrito", "BBQ", "Wings",
+    "Dumpling", "Bistro", "Ice Cream", "Dessert", "Yogurt", "Chocolate", "Candy",
+
     # Drink & Nightlife
-    "Bar", "Pub", "Club", "Brewery", "Lounge", "Speakeasy", "Wine", "Beer", 
+    "Bar", "Pub", "Club", "Brewery", "Lounge", "Speakeasy", "Wine", "Beer",
     "Cocktail", "Karaoke", "Dive",
-    
+
     # Arts & Ent
-    "Museum", "Gallery", "Theater", "Music", "Concert", "Comedy", "Arcade", 
+    "Museum", "Gallery", "Theater", "Music", "Concert", "Comedy", "Arcade",
     "Bowling", "Casino", "Stadium", "Cinema", "Movie",
-    
-    # Outdoors
-    "Park", "Garden", "Plaza", "Beach", "Lookout", "Trail", "River", "Lake", 
-    "Playground", "Monument", "Landmark",
-    
+
+    # Outdoors & Landmarks
+    "Park", "Garden", "Plaza", "Beach", "Lookout", "Trail", "River", "Lake",
+    "Playground", "Monument", "Landmark", "Bridge", "Lighthouse", "Harbor",
+    "Marina", "Zoo", "Historic", "Surf",
+
+    # Sports & Recreation
+    "Soccer Field", "Basketball Court", "Tennis Court", "Field",
+
     # Shopping (Curated)
-    "Mall", "Bookstore", "Record", "Market", "Boutique", "Thrift", "Vintage"
+    "Mall", "Bookstore", "Record", "Market", "Boutique", "Thrift", "Vintage",
+    "Department Store", "Gift Store", "Antique"
 ]
 
 UTILITY_KEYWORDS = [
