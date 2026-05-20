@@ -7,10 +7,10 @@ import { pool as attractionsDb } from '../db/attractionsConnection.js';
 import axios from 'axios';
 import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedding.js';
 import * as locationService from '../services/locationService.js';
-import { checkFoodIntercept, dismissFoodSuggestion, getNextFoodSuggestion } from '../services/foodInterceptService.js';
+import { checkFoodIntercept, dismissFoodSuggestion, getNextFoodSuggestion, refillAndGetFood } from '../services/foodInterceptService.js';
 
 // Maps a destination name to its location_id in the attractions DB.
-// Falls back to 1 (first seeded city) if lookup fails.
+// Falls back to 1 as a last-resort default if lookup fails.
 async function resolveLocationId(destination) {
   try {
     const { rows } = await attractionsDb.query(
@@ -18,7 +18,8 @@ async function resolveLocationId(destination) {
       [destination]
     );
     return rows.length > 0 ? rows[0].id : 1;
-  } catch {
+  } catch (err) {
+    console.error(`[resolveLocationId] DB lookup failed for "${destination}", falling back to 1:`, err.message);
     return 1;
   }
 }
@@ -1111,7 +1112,15 @@ export const nextFoodSuggestion = async (req, res) => {
     if (isNaN(tripId) || tripId <= 0) return res.status(400).json({ error: 'Invalid trip ID' });
 
     const position = await locationService.getPosition(tripId);
-    const foodCard = getNextFoodSuggestion(tripId, position);
+    let foodCard = getNextFoodSuggestion(tripId, position);
+
+    // Batch exhausted — fetch a fresh one from the engine
+    if (!foodCard) {
+      const tripRow = await usersDb.query('SELECT * FROM trips WHERE trip_id = $1', [tripId]);
+      if (tripRow.rows.length > 0) {
+        foodCard = await refillAndGetFood(tripId, tripRow.rows[0], position);
+      }
+    }
 
     if (!foodCard) {
       return res.status(404).json({ error: 'No more food suggestions available' });

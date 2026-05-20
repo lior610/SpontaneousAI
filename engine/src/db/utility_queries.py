@@ -58,7 +58,7 @@ def execute_closest_utility_query(
         query += " AND categories && %s::text[]"
         params.append(categories)
 
-    # Hours filtering (allow unpredictably formatted hour strings to pass to python)
+    # Hours filtering — non-standard formats pass through unfiltered
     if current_hour is not None:
         query += """
           AND (

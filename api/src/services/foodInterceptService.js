@@ -12,9 +12,9 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from 'axios';
 import * as usersDb from '../db/usersConnection.js';
 
-const FOOD_COOLDOWN_MS = parseInt(process.env.FOOD_COOLDOWN_MS || '3600000', 10);
-const ACTIVITY_THRESHOLD = parseInt(process.env.FOOD_GATE_ACTIVITY_THRESHOLD || '2', 10);
-const HOURS_THRESHOLD = parseFloat(process.env.FOOD_GATE_HOURS_THRESHOLD || '3.5');
+const FOOD_COOLDOWN_MS = parseInt(process.env.FOOD_COOLDOWN_MS, 10) || 3600000;
+const ACTIVITY_THRESHOLD = parseInt(process.env.FOOD_GATE_ACTIVITY_THRESHOLD, 10) || 2;
+const HOURS_THRESHOLD = parseFloat(process.env.FOOD_GATE_HOURS_THRESHOLD) || 3.5;
 const FOOD_INTERCEPT_ENABLED = process.env.FOOD_INTERCEPT_ENABLED !== 'false';
 
 // Singleton Gemini client — avoids re-instantiating on every LLM call
@@ -75,8 +75,17 @@ export function dismissFoodSuggestion(tripId) {
 
 export function getNextFoodSuggestion(tripId, position) {
   const foodPlace = getNextFoodFromBatch(tripId);
-  if (!foodPlace) return null;
+  if (!foodPlace || !foodPlace.name) return null;
   return buildFoodCard(foodPlace, position);
+}
+
+// Fetches a fresh batch from the engine and returns the first result
+export async function refillAndGetFood(tripId, trip, position) {
+  if (!position) return null;
+  const batch = await fetchFoodBatch(trip, position);
+  if (batch.length === 0) return null;
+  foodBatchCache.set(tripId, { results: batch, currentIndex: 1, storedAt: Date.now() });
+  return buildFoodCard(batch[0], position);
 }
 
 function isInCooldown(tripId) {
@@ -165,8 +174,7 @@ Given what this user has done today, is it appropriate to suggest a food break n
   }
 }
 
-// Calls the same engine recommendation pipeline but with category_filter='food'.
-// Results are cached per trip so "suggest different restaurant" just advances the pointer.
+// Calls the engine recommendation pipeline restricted to food. Caller caches the results.
 async function fetchFoodBatch(trip, position) {
   const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
   const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
@@ -180,7 +188,7 @@ async function fetchFoodBatch(trip, position) {
   });
 
   if (!res.data || res.data.length === 0) return [];
-  return res.data.map(r => r.attraction);
+  return res.data.map(r => r.attraction).filter(a => a && a.name);
 }
 
 function getNextFoodFromBatch(tripId) {
@@ -233,7 +241,7 @@ export async function checkFoodIntercept(tripId, trip, position) {
 
     return { triggered: true, foodCard: buildFoodCard(batch[0], position) };
   } catch (err) {
-    console.error('[FoodIntercept] Error:', err.message);
+    console.error(`[FoodIntercept] Error for tripId=${tripId}:`, err);
     return { triggered: false };
   }
 }

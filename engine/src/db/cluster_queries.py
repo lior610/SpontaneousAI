@@ -149,9 +149,12 @@ def execute_cluster_similarity_query(
         params.append(food_categories)
 
     # Any extra column-level filters passed from the API (e.g. budget, type)
+    ALLOWED_FILTER_COLUMNS = {'budget', 'type', 'is_open'}
     if filters:
         for column_name, filter_value in filters.items():
             if filter_value is None or column_name == 'category_filter':
+                continue
+            if column_name not in ALLOWED_FILTER_COLUMNS:
                 continue
             if isinstance(filter_value, bool):
                 query += f" AND {column_name} = {'TRUE' if filter_value else 'FALSE'}"

@@ -30,6 +30,7 @@ export function TripPage() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isFoodIntercept, setIsFoodIntercept] = useState(false);
+  const [foodBatchExhausted, setFoodBatchExhausted] = useState(false);
   const initialLoadDone = useRef(false);
 
   // Fetch browser GPS once on load
@@ -158,9 +159,46 @@ export function TripPage() {
     setIsLoading(true);
     try {
       const result = await fetchNextFoodSuggestion(tripId);
-      if (result.activity) applyActivityResult(result);
+      if (result.activity) {
+        applyActivityResult(result);
+      } else {
+        setFoodBatchExhausted(true);
+      }
     } catch (e) {
       console.error('[TripPage] Failed to fetch different restaurant:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // User chose "Look for more restaurants" after batch ran out
+  const handleRefillFood = async () => {
+    if (!tripId) return;
+    setIsLoading(true);
+    try {
+      const result = await fetchNextFoodSuggestion(tripId);
+      if (result.activity) {
+        setFoodBatchExhausted(false);
+        applyActivityResult(result);
+      }
+    } catch (e) {
+      console.error('[TripPage] Failed to refill food batch:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // User chose "Return" — go back to regular activities
+  const handleReturnFromFood = async () => {
+    if (!tripId) return;
+    setIsLoading(true);
+    setFoodBatchExhausted(false);
+    try {
+      sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
+      const result = await fetchNextActivity(tripId);
+      applyActivityResult(result);
+    } catch (e) {
+      console.error('[TripPage] Failed to fetch next activity:', e);
     } finally {
       setIsLoading(false);
     }
@@ -253,6 +291,25 @@ export function TripPage() {
       <main className="p-4 max-w-6xl mx-auto">
         {isLoading ? (
           <LoadingSpinner />
+        ) : foodBatchExhausted ? (
+          <div className="max-w-md mx-auto text-center space-y-6 py-12">
+            <p className="text-lg font-medium">No more restaurants in this batch</p>
+            <p className="text-sm text-muted-foreground">We can search for more nearby options, or you can continue with regular activities.</p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleRefillFood}
+                className="w-full h-11 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all"
+              >
+                Look for more restaurants
+              </button>
+              <button
+                onClick={handleReturnFromFood}
+                className="w-full h-11 rounded-lg border font-semibold text-foreground hover:bg-muted transition-all"
+              >
+                Return to activities
+              </button>
+            </div>
+          </div>
         ) : currentActivity ? (
           <div className="flex flex-col lg:flex-row lg:items-stretch gap-4">
             {/* Map */}
