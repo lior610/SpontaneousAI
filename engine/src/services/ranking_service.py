@@ -8,7 +8,7 @@ filters dynamically on top of the vector similarity score.
 import os
 from typing import List, Dict, Any, Optional
 
-from src.services.geo_utils import haversine
+from src.services.ranking_utils import compute_raw_scores
 
 # Scoring weights (must sum to 1.0 ideally)
 WEIGHT_SEMANTIC = float(os.getenv("RANKING_WEIGHT_SEMANTIC", "0.35"))
@@ -25,72 +25,6 @@ class RankingEngine:
     """
     Ranks a pool of candidate attractions based on weighted contextual scores.
     """
-    
-    def _score_distance(
-        self, 
-        attraction_lat: Optional[float], 
-        attraction_lng: Optional[float], 
-        user_lat: Optional[float], 
-        user_lng: Optional[float], 
-        max_walk_km: float
-    ) -> tuple[float, Optional[float]]:
-        dist_km = None
-        distance_score = 0.0
-        if attraction_lat and attraction_lng and user_lat and user_lng:
-            dist_km = haversine(user_lat, user_lng, attraction_lat, attraction_lng)
-            # Max walk constraint - floor at 0 as requested by spec
-            distance_score = max(0.0, 1.0 - (dist_km / max(0.1, max_walk_km)))
-        return distance_score, dist_km
-
-    def _score_hours(self, hours_str: Optional[str], current_hour: Optional[int]) -> float:
-        hours_score = 0.5  # Default unknown
-        if hours_str and current_hour is not None:
-            try:
-                parts = hours_str.split('-')
-                if len(parts) == 2:
-                    open_hr = int(parts[0].split(':')[0])
-                    close_hr = int(parts[1].split(':')[0])
-                    if open_hr <= close_hr:
-                        if open_hr <= current_hour < close_hr:
-                            hours_score = 1.0
-                        else:
-                            hours_score = 0.0
-                    else:
-                        # Overnight e.g. 22:00-02:00
-                        if current_hour >= open_hr or current_hour < close_hr:
-                            hours_score = 1.0
-                        else:
-                            hours_score = 0.0
-            except Exception:
-                pass
-        return hours_score
-        
-    def _score_budget(self, attr_budget_str: str, travel_style: str) -> float:
-        budget_score = 0.5
-        budget_val = None
-        if attr_budget_str:
-            numeric_str = ''.join(c for c in attr_budget_str if c.isdigit() or c == '.')
-            if numeric_str:
-                try:
-                    budget_val = float(numeric_str)
-                except ValueError:
-                    pass
-        
-        if budget_val is not None:
-            if travel_style == 'budget':
-                budget_score = 1.0 if budget_val <= 15.0 else 0.2
-            elif travel_style == 'balanced':
-                budget_score = 1.0 if 10.0 <= budget_val <= 50.0 else 0.5
-            elif travel_style == 'premium':
-                budget_score = 1.0 if budget_val >= 40.0 else 0.5
-        return budget_score
-
-    def _score_popularity(self, popularity_val: Any) -> float:
-        try:
-            pop = float(popularity_val)
-            return max(0.0, min(1.0, pop))
-        except (ValueError, TypeError):
-            return 0.2
 
     def _apply_diversity_bonus(self, candidate: Dict[str, Any], seen_categories: set, cluster_counts: dict) -> float:
         diversity_bonus = 0.0
@@ -150,49 +84,26 @@ class RankingEngine:
         # independent score. However, we'll do an initial pass for base scores.
         
         for candidate in candidates:
-            attraction_lat = candidate.get('latitude')
-            attraction_lng = candidate.get('longitude')
-            
-            # 1. Semantic Score (0-1)
-            semantic_score = candidate.get('similarity', 0.0)
-            
-            # 2. Distance Score (0-1)
-            distance_score, dist_km = self._score_distance(
-                attraction_lat, attraction_lng, user_lat, user_lng, max_walk_km
+            raw = compute_raw_scores(candidate, user_lat, user_lng, max_walk_km, travel_style, current_hour)
+
+            if raw['dist_km'] is not None:
+                candidate['distance_km'] = round(raw['dist_km'], 2)
+
+            base_score = (
+                WEIGHT_SEMANTIC * raw['semantic'] +
+                WEIGHT_DISTANCE * raw['distance'] +
+                WEIGHT_HOURS   * raw['hours'] +
+                WEIGHT_BUDGET  * raw['budget'] +
+                WEIGHT_POPULARITY * raw['popularity']
             )
-            if dist_km is not None:
-                candidate['distance_km'] = round(dist_km, 2)
-                
-            # 3. Hours Score (0, 0.5, 1)
-            hours_score = self._score_hours(candidate.get('hours'), current_hour)
-                
-            # 4. Budget Score (0-1)
-            attr_budget = str(candidate.get('budget', '')).strip()
-            budget_score = self._score_budget(attr_budget, travel_style)
-            
-            # 5. Popularity Score (0-1)
-            popularity_score = self._score_popularity(candidate.get('popularity'))
-            
-            # Save base scores before diversity bonus
-            candidate['_base_score'] = (
-                (WEIGHT_SEMANTIC * semantic_score) + 
-                (WEIGHT_DISTANCE * distance_score) + 
-                (WEIGHT_HOURS * hours_score) + 
-                (WEIGHT_BUDGET * budget_score) +
-                (WEIGHT_POPULARITY * popularity_score)
-            )
-            
-            # If verifiably closed, tank the score to 0
-            if hours_score == 0.0:
-                candidate['_base_score'] = 0.0
-            
-            # Append component scores for debugging / explanations
+            candidate['_base_score'] = 0.0 if raw['is_closed'] else base_score
+
             candidate['scoring_breakdown'] = {
-                'semantic': round(semantic_score, 3),
-                'distance': round(distance_score, 3),
-                'hours': round(hours_score, 3),
-                'budget': round(budget_score, 3),
-                'popularity': round(popularity_score, 3)
+                'semantic':   round(raw['semantic'],    3),
+                'distance':   round(raw['distance'],    3),
+                'hours':      round(raw['hours'],       3),
+                'budget':     round(raw['budget'],      3),
+                'popularity': round(raw['popularity'],  3),
             }
             
         # Sort initially by base score

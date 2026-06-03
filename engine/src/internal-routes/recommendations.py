@@ -14,6 +14,9 @@ from models.recommendation import RecommendationRequest, RecommendationResponse,
 from src.services.preference_service import PreferenceComposer
 from src.services.cluster_retrieval import ClusterRetrievalService
 from src.services.ranking_service import RankingEngine
+from src.services.rrf_ranker import RRFRanker
+from src.services.maxmin_ranker import MaxMinRanker
+from src.services.majority_voter import MajorityVoter
 from src.services.feedback_service import FeedbackService
 from db.attractionsConnection import get_db_connection as get_attr_conn
 
@@ -36,10 +39,12 @@ FALLBACK_COORDS = {
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
-# Depending on your DI setup, you can instantiate these or inject them
 preference_composer = PreferenceComposer()
 cluster_retrieval = ClusterRetrievalService(top_per_cluster=5, max_clusters=10)
 ranking_engine = RankingEngine()
+rrf_ranker = RRFRanker()
+maxmin_ranker = MaxMinRanker()
+majority_voter = MajorityVoter()
 feedback_service = FeedbackService(preference_composer=preference_composer)
 
 @router.post("/", response_model=List[RecommendationResponse])
@@ -147,16 +152,21 @@ async def get_recommendations(req: RecommendationRequest):
             logger.warning(f"Could not load explicitly seen categories: {e}")
             real_seen_categories = set()
 
-        # 4. Rank the Candidates
-        ranked_candidates = ranking_engine.rank_candidates(
-            candidates=candidates,
+        # 4. Rank via three algorithms + Borda count majority vote
+        # Each ranker receives its own shallow-copied list so in-place mutations
+        # (sorting, added fields) in one ranker don't affect the others.
+        base_rank_kwargs = dict(
             user_lat=user_lat,
             user_lng=user_lng,
             max_walk_km=db_max_walk_km,
             travel_style=db_travel_style,
             current_hour=current_hour,
-            real_seen_categories=real_seen_categories
+            real_seen_categories=real_seen_categories,
         )
+        ranked_linear = ranking_engine.rank_candidates(candidates=list(candidates), **base_rank_kwargs)
+        ranked_rrf    = rrf_ranker.rank_candidates(candidates=list(candidates),    **base_rank_kwargs)
+        ranked_maxmin = maxmin_ranker.rank_candidates(candidates=list(candidates), **base_rank_kwargs)
+        ranked_candidates = majority_voter.vote([ranked_linear, ranked_rrf, ranked_maxmin])
         
         # 5. Format Output
         responses = []
