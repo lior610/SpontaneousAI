@@ -185,17 +185,15 @@ Calls `get_liked_place_ids(conn, trip_id)` from `feedback_queries.py` to get the
 
 For each liked place, it fetches its 384-dim embedding from the attractions DB and applies the EMA formula sequentially:
 
-```
+```python
 realtime = EMA_ALPHA * attraction_embedding + (1 - EMA_ALPHA) * realtime
 ```
 
 `EMA_ALPHA` defaults to `0.3`. The result is L2-normalized.
 
-**Important — when does this loop run?** This only executes inside `build()`, which only does a **full rebuild** when no stored vector exists yet for this trip (or when `force_rebuild=True`). The first time `build()` completes, it writes the result into `user_preference_embeddings`. Every subsequent call to `build()` within the same trip hits the fast-path cache — no loop, no DB reads.
+**Important — when does this loop run?** This loop executes inside `build()` when it encounters a **cache miss** (e.g., after a server restart, during test environment DB purges, or when a user first connects) or when `force_rebuild=True` (triggered by wizard changes). 
 
-So if the user liked 20 places on Day 1, the 20-step EMA replay **will not happen on reconnect**. Each like during Day 1 already called `apply_feedback()`, which persisted the updated vector back to `user_preference_embeddings` immediately after each step. By the time the user reconnects on Day 2, the stored vector already incorporates all 20 likes — the fast-path cache fires instantly and returns it.
-
-The only scenario where the full replay would run is if the `user_preference_embeddings` row was explicitly deleted between sessions (e.g., a test environment purge via `DELETE FROM user_preference_embeddings`), which would force `build()` to reconstruct the vector from scratch using the `trip_feedback` history. Under normal operation this never happens.
+During normal execution, the `PreferenceComposer` maintains a shared class-level cache (`_active_trips`) containing the unblended components (trip setup, historical, realtime). So if the user liked 20 places on Day 1, the full EMA replay runs only upon their first connection or after a server reboot to rebuild the cache from the `trip_feedback` database. Once cached, each subsequent like calls `apply_feedback()`, which does a purely incremental, $O(1)$ EMA update directly on the cached realtime component and persists the final blended vector.
 
 ### `_blend(trip_vector, historical_vector, realtime_vector)`
 
@@ -492,16 +490,17 @@ The `UNIQUE (trip_id, place_id)` constraint prevents duplicate rows. If a user p
 
 ### Step 2: EMA Vector Update (only for `"liked"`)
 
-If `action == "liked"`, calls `preference_composer.apply_feedback(user_id, trip_id, place_id)`, which:
+If `action == "liked"`, calls `preference_composer.apply_feedback(user_id, trip_id, place_id)`, which performs an incremental $O(1)$ update to the vector:
 
-1. Loads the currently stored preference vector for this trip via `get_current_embedding(conn, trip_id)`. If none exists, it calls `build()` to create one from scratch.
-2. Fetches the new liked attraction's 384-dim embedding from the attractions DB.
-3. Applies one step of the EMA:
+1. Fetches the new liked attraction's 384-dim embedding from the attractions DB.
+2. Checks the class-level `_active_trips` cache. If the trip's components (trip, historical, realtime) are missing (e.g. server restart), it falls back to a full idempotent recalculation via `build(..., force_rebuild=True)`.
+3. If cached, it performs an $O(1)$ incremental EMA step strictly on the **realtime component**:
    ```python
-   updated = EMA_ALPHA * attraction_emb + (1 - EMA_ALPHA) * current
-   updated = L2_normalize(updated)
+   new_realtime = EMA_ALPHA * attraction_emb + (1 - EMA_ALPHA) * old_realtime
+   new_realtime = _l2_normalize(new_realtime)
    ```
-4. Persists the updated vector back to `user_preference_embeddings` via `upsert_preference_embedding(...)`.
+4. Updates the cache, blends the updated realtime component with the static trip and historical components, and L2-normalizes the result.
+5. Persists the final blended vector back to `user_preference_embeddings` via `upsert_preference_embedding(...)`.
 
 > **Note:** `"skipped"` and `"visited"` are only used as **exclusion filters**. They do not mathematically influence the preference vector. Shifting the vector *away* from a skipped place is avoided because the reason for the skip is ambiguous (e.g., user isn't hungry right now, not that they dislike food).
 
@@ -624,7 +623,7 @@ Shifting the vector *away* from a skipped place is risky because the reason for 
 EMA works multiplicatively against the remaining weight. With `α = 0.3`, one liked café contributes 30% to the new vector, while the existing cumulative profile owns 70%. After two likes, the second like contributes `0.3 × 0.3 = 9%` of the original profile. The effect decays rapidly — it's a strong nudge, not a replacement. The setting means the engine is responsive to real-time mood without inducing amnesia about the user's overall trip preferences.
 
 **Q: What happens if a user loses connection and reconnects mid-trip?**
-`get_current_embedding(conn, trip_id)` fetches the last persisted vector from `user_preference_embeddings`. Since every liked interaction writes the updated vector back to the database immediately, the engine resumes from exactly where it left off with no data loss.
+If it's just a client reconnect, the server's `_active_trips` memory cache is already warm and continues handling $O(1)$ updates. If the server crashed or restarted, `apply_feedback` detects a cache miss, loads the `trip_feedback` history from the DB, and gracefully reconstructs the active cache using the mathematically identical EMA sequence replay.
 
 ---
 

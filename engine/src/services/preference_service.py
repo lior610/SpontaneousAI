@@ -91,6 +91,10 @@ class PreferenceComposer:
     `build()` per request.
     """
 
+    # Class-level cache shared across all instances in the process.
+    # Key: trip_id. Value: dict with keys 'trip_vector', 'historical_vector', 'realtime_vector'
+    _active_trips: Dict[int, Dict[str, np.ndarray]] = {}
+
     async def build(
         self,
         user_id: int,
@@ -112,6 +116,10 @@ class PreferenceComposer:
         Returns:
             L2-normalised (384,) float32 preference vector
         """
+        if force_rebuild:
+            # Invalidate the cache when forcing a rebuild (e.g. from the wizard)
+            PreferenceComposer._active_trips.pop(trip_id, None)
+
         # Fast path: return the stored embedding if it exists
         if not force_rebuild:
             with get_users_conn() as conn:
@@ -142,6 +150,13 @@ class PreferenceComposer:
         # --- Final blend ---
         preference_vector = self._blend(trip_vector, historical_vector, realtime_vector)
 
+        # Cache the individual components for O(1) incremental feedback updates
+        PreferenceComposer._active_trips[trip_id] = {
+            "trip_vector": trip_vector,
+            "historical_vector": historical_vector,
+            "realtime_vector": realtime_vector
+        }
+
         # --- Persist ---
         preference_text = self._build_preference_text(user, trip)
         with get_users_conn() as conn:
@@ -170,13 +185,6 @@ class PreferenceComposer:
         Returns:
             Updated L2-normalised (384,) preference vector
         """
-        # Fetch the current stored vector (or build from scratch if missing)
-        with get_users_conn() as conn:
-            current = get_current_embedding(conn, trip_id)
-
-        if current is None:
-            current = await self.build(user_id, trip_id)
-
         # Fetch the attraction embedding
         with get_attractions_conn() as conn:
             embeddings = get_attraction_embeddings(conn, [liked_place_id])
@@ -184,12 +192,34 @@ class PreferenceComposer:
 
         if attraction_emb is None:
             logger.warning(f"No embedding found for place_id={liked_place_id}, skipping EMA")
-            return current
+            # Return current full blended vector if available, or fetch it
+            with get_users_conn() as conn:
+                current = get_current_embedding(conn, trip_id)
+            return current if current is not None else await self.build(user_id, trip_id)
 
-        # EMA update
-        updated = EMA_ALPHA * attraction_emb + (1 - EMA_ALPHA) * current
-        updated = _l2_normalize(updated)
+        # Check if we have the active trip vectors cached
+        if trip_id not in PreferenceComposer._active_trips:
+            # Cache miss (server restarted or first like). Rebuild fully from DB.
+            logger.info(f"Cache miss for trip_id={trip_id} in apply_feedback. Rebuilding.")
+            return await self.build(user_id, trip_id, force_rebuild=True)
 
+        # Cache hit: perform O(1) incremental EMA update on realtime component
+        components = PreferenceComposer._active_trips[trip_id]
+        old_realtime = components["realtime_vector"]
+        
+        new_realtime = EMA_ALPHA * attraction_emb + (1 - EMA_ALPHA) * old_realtime
+        new_realtime = _l2_normalize(new_realtime)
+        
+        # Update cache
+        components["realtime_vector"] = new_realtime
+        
+        # Re-blend
+        updated = self._blend(
+            components["trip_vector"], 
+            components["historical_vector"], 
+            new_realtime
+        )
+        
         # Persist updated vector
         with get_users_conn() as conn:
             user = get_user(conn, user_id)
