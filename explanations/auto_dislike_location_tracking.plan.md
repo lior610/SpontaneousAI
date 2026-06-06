@@ -1,11 +1,6 @@
----
-name: New Feedback Popup & Logic
-overview: "The post-visit prompt is trimmed to Like / Skip / Next. Like and Skip are explicit signals; Next defers to automatic, location-based inference that only ever marks an attraction as 'didn't like' (a short stay), never as liked."
-branch: didn't-like-feature
-isProject: false
----
 
-# New Feedback Popup & Logic
+
+# Feedback Popup & Logic
 
 ## The Popup
 
