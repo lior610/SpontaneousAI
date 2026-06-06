@@ -49,6 +49,9 @@ export interface Activity {
     tooLong?: boolean;
     tooFar?: boolean;
     tooExpensive?: boolean;
+    autoDetected?: boolean;
+    durationMinutes?: number;
+    recommendedStayMinutes?: number;
   };
 }
 

@@ -3,17 +3,36 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Settings, MapPin, RefreshCw, LogOut, Home, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ActivityCard } from '@/components/ActivityCard';
-import { FeedbackPopup } from '@/components/FeedbackPopup';
+import { FeedbackPopup, FeedbackChoice } from '@/components/FeedbackPopup';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import { MapView } from '@/components/MapView';
 import { Activity, TripSetup, defaultTripSetup } from '@/types/trip';
-import { fetchNextActivity, completeActivity, skipActivity, fetchCompletedActivities } from '@/services/tripService';
+import { fetchNextActivity, completeActivity, skipActivity, fetchCompletedActivities, CompletedActivityLog } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
-import { getCurrentPosition, startTracking, stopTracking } from '@/services/locationService';
+import { getCurrentPosition, startTracking, stopTracking, watchArrivalDeparture } from '@/services/locationService';
+
+const GPS_ENABLED = import.meta.env.VITE_GPS_ENABLED === 'on';
 
 const ACTIVITY_CACHE_KEY = (id: number) => `trip_${id}_current_activity`;
 const LOCATION_CACHE_KEY = (id: number) => `trip_${id}_user_location`;
+
+function toActivity(c: CompletedActivityLog): Activity {
+  return {
+    id: c.id.toString(),
+    title: c.title,
+    description: c.description ?? '',
+    image: '',
+    rating: c.rating ?? 0,
+    reviewCount: c.review_count ?? 0,
+    estimatedTime: c.estimated_time ?? '',
+    cost: c.cost ?? '',
+    category: c.category ?? 'general',
+    address: c.address ?? '',
+    completed: true,
+    feedback: c.feedback,
+  };
+}
 
 export function TripPage() {
   const navigate = useNavigate();
@@ -26,10 +45,13 @@ export function TripPage() {
   const [currentActivity, setCurrentActivity] = useState<Activity | null>(null);
   const [completedActivities, setCompletedActivities] = useState<Activity[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasArrived, setHasArrived] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const initialLoadDone = useRef(false);
+  // ISO timestamp of when the geofence detected the user arrived at the current attraction.
+  const arrivedAtRef = useRef<string | null>(null);
 
   // Fetch browser GPS once on load
   useEffect(() => {
@@ -76,20 +98,7 @@ export function TripPage() {
 
         const completed = await fetchCompletedActivities(tripId);
         if (completed.length > 0) {
-          setCompletedActivities(completed.map(c => ({
-            id: c.id.toString(),
-            title: c.title,
-            description: c.description ?? '',
-            image: '',
-            rating: c.rating ?? 0,
-            reviewCount: c.review_count ?? 0,
-            estimatedTime: c.estimated_time ?? '',
-            cost: c.cost ?? '',
-            category: c.category ?? 'general',
-            address: c.address ?? '',
-            completed: true,
-            feedback: c.feedback,
-          })));
+          setCompletedActivities(completed.map(toActivity));
         }
       } catch (err) {
         console.error('[TripPage] Failed to load:', err);
@@ -100,36 +109,60 @@ export function TripPage() {
     load();
   }, [tripId]);
 
-  const handleActivityComplete = () => {
-    setShowFeedback(true);
+  const finishingRef = useRef(false);
+
+  // The user tapped "Done" (or the geofence detected they left) — open the feedback popup.
+  const handleActivityComplete = () => setShowFeedback(true);
+
+  // Map the popup choice to feedback, then complete + advance.
+  //   liked   -> explicit like
+  //   skipped -> explicit negative signal
+  //   next    -> no explicit feedback; backend infers from dwell time via the LLM
+  const handleFeedbackSubmit = (choice: FeedbackChoice) => {
+    setShowFeedback(false);
+    let feedback: Activity['feedback'] | undefined;
+    if (choice === 'liked') feedback = { liked: true };
+    else if (choice === 'skipped') feedback = { liked: false };
+    else feedback = undefined;
+    finishActivity(feedback);
   };
 
-  // Submit feedback, mark activity done, update user location to completed attraction
-  const handleFeedbackSubmit = async (feedback: Activity['feedback'], needSpecific?: string) => {
-    if (!tripId) {
-      setShowFeedback(false);
-      return;
-    }
+  // Mark the current activity done and advance to the next one. The backend uses the
+  // arrival timestamp (from the geofence) to measure dwell time; when no explicit
+  // feedback is given it asks the LLM whether the user likely didn't enjoy it.
+  const finishActivity = async (feedback?: Activity['feedback']) => {
+    if (!tripId || finishingRef.current) return;
+    finishingRef.current = true;
+
+    const arrivedAt = arrivedAtRef.current;
 
     if (currentActivity) {
       try {
-        await completeActivity(tripId, currentActivity, feedback);
+        await completeActivity(tripId, currentActivity, { arrivedAt, feedback });
       } catch (err) {
         console.error('[TripPage] Failed to complete activity:', err);
       }
-      setCompletedActivities(prev => [...prev, { ...currentActivity, completed: true, feedback }]);
       // Use completed attraction's coords as new user position
       if (currentActivity.lat != null && currentActivity.lng != null) {
         setUserLocation({ lat: currentActivity.lat, lng: currentActivity.lng });
       }
+      // Refresh history so the resulting feedback (explicit or auto-derived) is reflected.
+      try {
+        const completed = await fetchCompletedActivities(tripId);
+        setCompletedActivities(completed.map(toActivity));
+      } catch (err) {
+        console.error('[TripPage] Failed to refresh completed activities:', err);
+      }
     }
-    setShowFeedback(false);
 
-    // Activity done: clear cache and fetch next activity from backend
+    // Reset arrival tracking for the next attraction.
+    arrivedAtRef.current = null;
+    setHasArrived(false);
+
     sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
     setIsLoading(true);
     try {
-      const result = await fetchNextActivity(tripId, needSpecific);
+      const result = await fetchNextActivity(tripId);
       setCurrentActivity(result.activity);
       if (result.userLocation) {
         setUserLocation(result.userLocation);
@@ -142,8 +175,36 @@ export function TripPage() {
       console.error('[TripPage] Failed to fetch next activity:', err);
     } finally {
       setIsLoading(false);
+      finishingRef.current = false;
     }
   };
+
+  // Geofence: detect arrival/departure at the current attraction to measure dwell time.
+  // On arrival we record the timestamp; on departure we prompt the feedback popup.
+  useEffect(() => {
+    if (!GPS_ENABLED || !currentActivity || currentActivity.lat == null || currentActivity.lng == null) {
+      return;
+    }
+    arrivedAtRef.current = null;
+    setHasArrived(false);
+
+    const stop = watchArrivalDeparture(
+      { lat: currentActivity.lat, lng: currentActivity.lng },
+      {
+        onPosition: (coords) => setUserLocation(coords),
+        onArrive: (coords) => {
+          arrivedAtRef.current = new Date().toISOString();
+          setHasArrived(true);
+          setUserLocation(coords);
+        },
+        onDepart: () => {
+          setShowFeedback(true);
+        },
+      }
+    );
+    return stop;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentActivity?.id]);
 
   const handleLogout = () => {
     clearCurrentUser();
@@ -232,6 +293,12 @@ export function TripPage() {
                 <span className="px-2 py-1 rounded-full bg-accent/10 text-accent font-medium">Next Up</span>
                 <span>Activity #{completedActivities.length + 1}</span>
               </div>
+              {GPS_ENABLED && hasArrived && (
+                <div className="flex items-center gap-2 text-sm rounded-lg px-3 py-2 border bg-secondary/10 text-secondary border-secondary/20">
+                  <MapPin className="w-4 h-4" />
+                  You've arrived — we'll ask how it went when you leave.
+                </div>
+              )}
               <ActivityCard activity={currentActivity} onComplete={handleActivityComplete} />
 
               {/* Refresh Button */}

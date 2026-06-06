@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS attractions (
     popularity NUMERIC(4, 3) CHECK (popularity >= 0 AND popularity <= 1),
     image_url TEXT,
     wikipedia_extract TEXT,
+    -- LLM-inferred typical visit duration (minutes); cached so we ask the LLM once per place.
+    recommended_stay_minutes INTEGER,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -133,6 +135,10 @@ CREATE TABLE IF NOT EXISTS trip_activity_logs (
     rating NUMERIC(3, 2),
     review_count INTEGER,
     feedback JSONB,
+    place_id TEXT,
+    arrived_at TIMESTAMPTZ,
+    duration_minutes INTEGER,
+    recommended_stay_minutes INTEGER,
     completed_at TIMESTAMPTZ DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT trip_activity_logs_trip_id_fkey FOREIGN KEY (trip_id) REFERENCES trips(trip_id) ON DELETE CASCADE
