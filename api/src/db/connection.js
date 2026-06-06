@@ -10,7 +10,7 @@ const pool = new Pool({
   password: process.env.POSTGRES_PASSWORD || 'postgres',
   max: 20, // Maximum number of clients in the pool
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: parseInt(process.env.PG_CONNECTION_TIMEOUT_MS || '15000', 10),
 });
 
 /**
