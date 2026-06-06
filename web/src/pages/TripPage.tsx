@@ -293,12 +293,10 @@ export function TripPage() {
                 <span className="px-2 py-1 rounded-full bg-accent/10 text-accent font-medium">Next Up</span>
                 <span>Activity #{completedActivities.length + 1}</span>
               </div>
-              {GPS_ENABLED && (
-                <div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2 border ${hasArrived ? 'bg-secondary/10 text-secondary border-secondary/20' : 'bg-muted text-muted-foreground border-border'}`}>
+              {GPS_ENABLED && hasArrived && (
+                <div className="flex items-center gap-2 text-sm rounded-lg px-3 py-2 border bg-secondary/10 text-secondary border-secondary/20">
                   <MapPin className="w-4 h-4" />
-                  {hasArrived
-                    ? "You've arrived — we'll ask how it went when you leave."
-                    : "Head to the spot. We'll track how long you stay."}
+                  You've arrived — we'll ask how it went when you leave.
                 </div>
               )}
               <ActivityCard activity={currentActivity} onComplete={handleActivityComplete} />
