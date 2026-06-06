@@ -5,6 +5,8 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  // Load env vars from the single root .env (one level up), not from web/.
+  envDir: path.resolve(__dirname, ".."),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

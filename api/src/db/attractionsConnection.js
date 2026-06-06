@@ -11,7 +11,7 @@ const pool = new Pool({
   password: process.env.POSTGRES_PASSWORD || 'postgres',
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: parseInt(process.env.PG_CONNECTION_TIMEOUT_MS || '15000', 10),
 });
 
 export async function testConnection() {
