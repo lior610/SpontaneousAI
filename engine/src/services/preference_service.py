@@ -24,7 +24,7 @@ import asyncio
 import logging
 from pathlib import Path
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 import numpy as np
 
@@ -53,11 +53,11 @@ def _env_float(key: str, default: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Source weights: tune HISTORICAL + TRIP_SETUP; REALTIME fills the remainder (sums to 1.0)
+# Dynamic Vector Weights
 # ---------------------------------------------------------------------------
-WEIGHT_HISTORICAL: float = 0.2
-WEIGHT_TRIP_SETUP: float = 0.5
-WEIGHT_REALTIME: float = 1.0 - (WEIGHT_HISTORICAL + WEIGHT_TRIP_SETUP)
+VECTOR_WEIGHT_SETUP_BASE = _env_float("VECTOR_WEIGHT_SETUP_BASE", 0.80)
+VECTOR_WEIGHT_SHIFT_PER_LIKE = _env_float("VECTOR_WEIGHT_SHIFT_PER_LIKE", 0.12)
+VECTOR_WEIGHT_MAX_REALTIME = _env_float("VECTOR_WEIGHT_MAX_REALTIME", 0.60)
 
 # Within the trip-setup vector: category breakdown vs qualifier text (should sum to 1.0)
 WEIGHT_CATEGORIES: float = _env_float("PREF_WEIGHT_TRIP_SETUP_CATEGORIES", 0.80)
@@ -92,8 +92,8 @@ class PreferenceComposer:
     """
 
     # Class-level cache shared across all instances in the process.
-    # Key: trip_id. Value: dict with keys 'trip_vector', 'historical_vector', 'realtime_vector'
-    _active_trips: Dict[int, Dict[str, np.ndarray]] = {}
+    # Key: trip_id. Value: dict with keys 'trip_vector', 'historical_vector', 'realtime_vector', 'num_likes'
+    _active_trips: Dict[int, Dict[str, Any]] = {}
 
     async def build(
         self,
@@ -145,16 +145,17 @@ class PreferenceComposer:
         historical_vector = await self._build_historical_vector(user_id, trip_id)
 
         # --- Signal 3: Real-time EMA vector ---
-        realtime_vector = await self._build_realtime_vector(trip_id, trip_vector)
+        realtime_vector, num_likes = await self._build_realtime_vector(trip_id, trip_vector)
 
         # --- Final blend ---
-        preference_vector = self._blend(trip_vector, historical_vector, realtime_vector)
+        preference_vector = self._blend(trip_vector, historical_vector, realtime_vector, num_likes)
 
         # Cache the individual components for O(1) incremental feedback updates
         PreferenceComposer._active_trips[trip_id] = {
             "trip_vector": trip_vector,
             "historical_vector": historical_vector,
-            "realtime_vector": realtime_vector
+            "realtime_vector": realtime_vector,
+            "num_likes": num_likes
         }
 
         # --- Persist ---
@@ -212,12 +213,14 @@ class PreferenceComposer:
         
         # Update cache
         components["realtime_vector"] = new_realtime
+        components["num_likes"] += 1
         
         # Re-blend
         updated = self._blend(
             components["trip_vector"], 
             components["historical_vector"], 
-            new_realtime
+            new_realtime,
+            components["num_likes"]
         )
         
         # Persist updated vector
@@ -310,19 +313,19 @@ class PreferenceComposer:
 
     async def _build_realtime_vector(
         self, trip_id: int, fallback: np.ndarray
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, int]:
         """
         EMA over liked attraction embeddings for the current trip.
 
         Starts from `fallback` (the trip-setup vector) so the real-time
         signal is grounded in the user's stated preferences.
-        Returns `fallback` unchanged if no likes recorded yet.
+        Returns `fallback` unchanged and 0 if no likes recorded yet.
         """
         with get_users_conn() as conn:
             liked_ids = get_liked_place_ids(conn, trip_id)
 
         if not liked_ids:
-            return fallback
+            return fallback, 0
 
         with get_attractions_conn() as conn:
             attraction_embeddings = get_attraction_embeddings(conn, liked_ids)
@@ -332,32 +335,36 @@ class PreferenceComposer:
             if emb is not None:
                 realtime = EMA_ALPHA * emb + (1 - EMA_ALPHA) * realtime
 
-        return _l2_normalize(realtime)
+        return _l2_normalize(realtime), len(liked_ids)
 
     def _blend(
         self,
         trip_vector: np.ndarray,
         historical_vector: Optional[np.ndarray],
         realtime_vector: np.ndarray,
+        num_likes: int = 0
     ) -> np.ndarray:
         """
-        Combine the three source vectors with their respective weights.
+        Combine the three source vectors using dynamic weights.
 
         If historical is absent (new user), its weight is redistributed
         proportionally to the other two sources.
         """
+        realtime_weight = min(VECTOR_WEIGHT_MAX_REALTIME, num_likes * VECTOR_WEIGHT_SHIFT_PER_LIKE)
+        setup_weight = VECTOR_WEIGHT_SETUP_BASE - realtime_weight
+
         if historical_vector is not None:
+            historical_weight = 1.0 - VECTOR_WEIGHT_SETUP_BASE
             combined = (
-                WEIGHT_TRIP_SETUP * trip_vector
-                + WEIGHT_HISTORICAL * historical_vector
-                + WEIGHT_REALTIME * realtime_vector
+                setup_weight * trip_vector
+                + historical_weight * historical_vector
+                + realtime_weight * realtime_vector
             )
         else:
             # Redistribute historical weight proportionally
-            total = WEIGHT_TRIP_SETUP + WEIGHT_REALTIME
             combined = (
-                (WEIGHT_TRIP_SETUP / total) * trip_vector
-                + (WEIGHT_REALTIME / total) * realtime_vector
+                (setup_weight / VECTOR_WEIGHT_SETUP_BASE) * trip_vector
+                + (realtime_weight / VECTOR_WEIGHT_SETUP_BASE) * realtime_vector
             )
         return _l2_normalize(combined)
 
