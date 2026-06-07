@@ -2,6 +2,7 @@
 Recommendations Router - API endpoints for receiving recommendations and posting feedback.
 """
 import logging
+import random
 from typing import List
 from fastapi import APIRouter, HTTPException, Depends
 try:
@@ -17,11 +18,26 @@ from src.services.feedback_service import FeedbackService
 
 logger = logging.getLogger(__name__)
 
+FALLBACK_COORDS = {
+    "new york": [
+        (40.7580, -73.9855), # Times Square
+        (40.7812, -73.9665)  # Central Park
+    ],
+    "tel aviv": [
+        (32.0780, 34.7742), # Dizengoff Square
+        (32.0686, 34.7700)  # Nahalat Binyamin
+    ],
+    "london": [
+        (51.5136, -0.1365), # Soho
+        (51.5117, -0.1240)  # Covent Garden
+    ]
+}
+
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
 # Depending on your DI setup, you can instantiate these or inject them
 preference_composer = PreferenceComposer()
-cluster_retrieval = ClusterRetrievalService(top_per_cluster=5, max_clusters=5)
+cluster_retrieval = ClusterRetrievalService(top_per_cluster=5, max_clusters=10)
 ranking_engine = RankingEngine()
 feedback_service = FeedbackService(preference_composer=preference_composer)
 
@@ -84,6 +100,16 @@ async def get_recommendations(req: RecommendationRequest):
                 db_location_id = row[0]
                 db_timezone = row[1]
                 
+            # 2.2 Fallback to random popular hub if GPS is not available
+            if user_lat is None or user_lng is None:
+                dest_lower = dest.lower()
+                for key, coords_list in FALLBACK_COORDS.items():
+                    if key in dest_lower:
+                        fallback = random.choice(coords_list)
+                        user_lat, user_lng = fallback[0], fallback[1]
+                        logger.info(f"GPS not provided, falling back to {key} default hub: {user_lat}, {user_lng}")
+                        break
+
             # 2.5 Adjust current_hour to destination's local time
             if db_timezone and req.current_time:
                 try:

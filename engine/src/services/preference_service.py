@@ -24,7 +24,7 @@ import asyncio
 import logging
 from pathlib import Path
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 import numpy as np
 
@@ -53,11 +53,11 @@ def _env_float(key: str, default: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Source weights: tune HISTORICAL + TRIP_SETUP; REALTIME fills the remainder (sums to 1.0)
+# Dynamic Vector Weights
 # ---------------------------------------------------------------------------
-WEIGHT_HISTORICAL: float = 0.2
-WEIGHT_TRIP_SETUP: float = 0.5
-WEIGHT_REALTIME: float = 1.0 - (WEIGHT_HISTORICAL + WEIGHT_TRIP_SETUP)
+VECTOR_WEIGHT_SETUP_BASE = _env_float("VECTOR_WEIGHT_SETUP_BASE", 0.80)
+VECTOR_WEIGHT_SHIFT_PER_LIKE = _env_float("VECTOR_WEIGHT_SHIFT_PER_LIKE", 0.12)
+VECTOR_WEIGHT_MAX_REALTIME = _env_float("VECTOR_WEIGHT_MAX_REALTIME", 0.60)
 
 # Within the trip-setup vector: category breakdown vs qualifier text (should sum to 1.0)
 WEIGHT_CATEGORIES: float = _env_float("PREF_WEIGHT_TRIP_SETUP_CATEGORIES", 0.80)
@@ -91,6 +91,10 @@ class PreferenceComposer:
     `build()` per request.
     """
 
+    # Class-level cache shared across all instances in the process.
+    # Key: trip_id. Value: dict with keys 'trip_vector', 'historical_vector', 'realtime_vector', 'num_likes'
+    _active_trips: Dict[int, Dict[str, Any]] = {}
+
     async def build(
         self,
         user_id: int,
@@ -112,6 +116,10 @@ class PreferenceComposer:
         Returns:
             L2-normalised (384,) float32 preference vector
         """
+        if force_rebuild:
+            # Invalidate the cache when forcing a rebuild (e.g. from the wizard)
+            PreferenceComposer._active_trips.pop(trip_id, None)
+
         # Fast path: return the stored embedding if it exists
         if not force_rebuild:
             with get_users_conn() as conn:
@@ -137,10 +145,18 @@ class PreferenceComposer:
         historical_vector = await self._build_historical_vector(user_id, trip_id)
 
         # --- Signal 3: Real-time EMA vector ---
-        realtime_vector = await self._build_realtime_vector(trip_id, trip_vector)
+        realtime_vector, num_likes = await self._build_realtime_vector(trip_id, trip_vector)
 
         # --- Final blend ---
-        preference_vector = self._blend(trip_vector, historical_vector, realtime_vector)
+        preference_vector = self._blend(trip_vector, historical_vector, realtime_vector, num_likes)
+
+        # Cache the individual components for O(1) incremental feedback updates
+        PreferenceComposer._active_trips[trip_id] = {
+            "trip_vector": trip_vector,
+            "historical_vector": historical_vector,
+            "realtime_vector": realtime_vector,
+            "num_likes": num_likes
+        }
 
         # --- Persist ---
         preference_text = self._build_preference_text(user, trip)
@@ -170,13 +186,6 @@ class PreferenceComposer:
         Returns:
             Updated L2-normalised (384,) preference vector
         """
-        # Fetch the current stored vector (or build from scratch if missing)
-        with get_users_conn() as conn:
-            current = get_current_embedding(conn, trip_id)
-
-        if current is None:
-            current = await self.build(user_id, trip_id)
-
         # Fetch the attraction embedding
         with get_attractions_conn() as conn:
             embeddings = get_attraction_embeddings(conn, [liked_place_id])
@@ -184,12 +193,36 @@ class PreferenceComposer:
 
         if attraction_emb is None:
             logger.warning(f"No embedding found for place_id={liked_place_id}, skipping EMA")
-            return current
+            # Return current full blended vector if available, or fetch it
+            with get_users_conn() as conn:
+                current = get_current_embedding(conn, trip_id)
+            return current if current is not None else await self.build(user_id, trip_id)
 
-        # EMA update
-        updated = EMA_ALPHA * attraction_emb + (1 - EMA_ALPHA) * current
-        updated = _l2_normalize(updated)
+        # Check if we have the active trip vectors cached
+        if trip_id not in PreferenceComposer._active_trips:
+            # Cache miss (server restarted or first like). Rebuild fully from DB.
+            logger.info(f"Cache miss for trip_id={trip_id} in apply_feedback. Rebuilding.")
+            return await self.build(user_id, trip_id, force_rebuild=True)
 
+        # Cache hit: perform O(1) incremental EMA update on realtime component
+        components = PreferenceComposer._active_trips[trip_id]
+        old_realtime = components["realtime_vector"]
+        
+        new_realtime = EMA_ALPHA * attraction_emb + (1 - EMA_ALPHA) * old_realtime
+        new_realtime = _l2_normalize(new_realtime)
+        
+        # Update cache
+        components["realtime_vector"] = new_realtime
+        components["num_likes"] += 1
+        
+        # Re-blend
+        updated = self._blend(
+            components["trip_vector"], 
+            components["historical_vector"], 
+            new_realtime,
+            components["num_likes"]
+        )
+        
         # Persist updated vector
         with get_users_conn() as conn:
             user = get_user(conn, user_id)
@@ -280,19 +313,19 @@ class PreferenceComposer:
 
     async def _build_realtime_vector(
         self, trip_id: int, fallback: np.ndarray
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, int]:
         """
         EMA over liked attraction embeddings for the current trip.
 
         Starts from `fallback` (the trip-setup vector) so the real-time
         signal is grounded in the user's stated preferences.
-        Returns `fallback` unchanged if no likes recorded yet.
+        Returns `fallback` unchanged and 0 if no likes recorded yet.
         """
         with get_users_conn() as conn:
             liked_ids = get_liked_place_ids(conn, trip_id)
 
         if not liked_ids:
-            return fallback
+            return fallback, 0
 
         with get_attractions_conn() as conn:
             attraction_embeddings = get_attraction_embeddings(conn, liked_ids)
@@ -302,32 +335,36 @@ class PreferenceComposer:
             if emb is not None:
                 realtime = EMA_ALPHA * emb + (1 - EMA_ALPHA) * realtime
 
-        return _l2_normalize(realtime)
+        return _l2_normalize(realtime), len(liked_ids)
 
     def _blend(
         self,
         trip_vector: np.ndarray,
         historical_vector: Optional[np.ndarray],
         realtime_vector: np.ndarray,
+        num_likes: int = 0
     ) -> np.ndarray:
         """
-        Combine the three source vectors with their respective weights.
+        Combine the three source vectors using dynamic weights.
 
         If historical is absent (new user), its weight is redistributed
         proportionally to the other two sources.
         """
+        realtime_weight = min(VECTOR_WEIGHT_MAX_REALTIME, num_likes * VECTOR_WEIGHT_SHIFT_PER_LIKE)
+        setup_weight = VECTOR_WEIGHT_SETUP_BASE - realtime_weight
+
         if historical_vector is not None:
+            historical_weight = 1.0 - VECTOR_WEIGHT_SETUP_BASE
             combined = (
-                WEIGHT_TRIP_SETUP * trip_vector
-                + WEIGHT_HISTORICAL * historical_vector
-                + WEIGHT_REALTIME * realtime_vector
+                setup_weight * trip_vector
+                + historical_weight * historical_vector
+                + realtime_weight * realtime_vector
             )
         else:
             # Redistribute historical weight proportionally
-            total = WEIGHT_TRIP_SETUP + WEIGHT_REALTIME
             combined = (
-                (WEIGHT_TRIP_SETUP / total) * trip_vector
-                + (WEIGHT_REALTIME / total) * realtime_vector
+                (setup_weight / VECTOR_WEIGHT_SETUP_BASE) * trip_vector
+                + (realtime_weight / VECTOR_WEIGHT_SETUP_BASE) * realtime_vector
             )
         return _l2_normalize(combined)
 
