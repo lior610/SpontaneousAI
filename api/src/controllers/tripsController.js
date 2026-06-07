@@ -104,8 +104,8 @@ export const getTripById = async (req, res) => {
     // Validate id is a number
     const tripId = parseInt(id, 10);
     if (isNaN(tripId) || tripId <= 0) {
-      return res.status(400).json({ 
-        error: 'Invalid trip ID. Must be a positive integer' 
+      return res.status(400).json({
+        error: 'Invalid trip ID. Must be a positive integer'
       });
     }
 
@@ -300,18 +300,18 @@ export const createTrip = async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating trip:', error);
-    
+
     // Handle foreign key constraint violation
     if (error.code === '23503') {
-      return res.status(404).json({ 
-        error: 'User not found' 
+      return res.status(404).json({
+        error: 'User not found'
       });
     }
-    
+
     // Handle check constraint violation (date range)
     if (error.code === '23514') {
-      return res.status(400).json({ 
-        error: 'Invalid date range: end_date must be greater than or equal to start_date' 
+      return res.status(400).json({
+        error: 'Invalid date range: end_date must be greater than or equal to start_date'
       });
     }
 
@@ -322,10 +322,10 @@ export const createTrip = async (req, res) => {
 export const updateTrip = async (req, res) => {
   try {
     const { id } = req.params;
-    const { 
-      destination, 
-      start_date, 
-      end_date, 
+    const {
+      destination,
+      start_date,
+      end_date,
       budget,
       preference_breakdown,
       max_walking_distance,
@@ -352,8 +352,8 @@ export const updateTrip = async (req, res) => {
     // Validate id is a number
     const tripId = parseInt(id, 10);
     if (isNaN(tripId) || tripId <= 0) {
-      return res.status(400).json({ 
-        error: 'Invalid trip ID. Must be a positive integer' 
+      return res.status(400).json({
+        error: 'Invalid trip ID. Must be a positive integer'
       });
     }
 
@@ -364,8 +364,8 @@ export const updateTrip = async (req, res) => {
     );
 
     if (tripCheck.rows.length === 0) {
-      return res.status(404).json({ 
-        error: 'Trip not found' 
+      return res.status(404).json({
+        error: 'Trip not found'
       });
     }
 
@@ -376,8 +376,8 @@ export const updateTrip = async (req, res) => {
 
     if (destination !== undefined) {
       if (typeof destination !== 'string' || destination.trim().length === 0) {
-        return res.status(400).json({ 
-          error: 'destination must be a non-empty string' 
+        return res.status(400).json({
+          error: 'destination must be a non-empty string'
         });
       }
       updates.push(`destination = $${paramIndex}`);
@@ -388,8 +388,8 @@ export const updateTrip = async (req, res) => {
     if (start_date !== undefined) {
       const start = new Date(start_date);
       if (isNaN(start.getTime())) {
-        return res.status(400).json({ 
-          error: 'Invalid start_date format. Use YYYY-MM-DD or ISO 8601 format' 
+        return res.status(400).json({
+          error: 'Invalid start_date format. Use YYYY-MM-DD or ISO 8601 format'
         });
       }
       updates.push(`start_date = $${paramIndex}`);
@@ -400,8 +400,8 @@ export const updateTrip = async (req, res) => {
     if (end_date !== undefined) {
       const end = new Date(end_date);
       if (isNaN(end.getTime())) {
-        return res.status(400).json({ 
-          error: 'Invalid end_date format. Use YYYY-MM-DD or ISO 8601 format' 
+        return res.status(400).json({
+          error: 'Invalid end_date format. Use YYYY-MM-DD or ISO 8601 format'
         });
       }
       updates.push(`end_date = $${paramIndex}`);
@@ -413,8 +413,8 @@ export const updateTrip = async (req, res) => {
       if (budget !== null) {
         const budgetValue = parseFloat(budget);
         if (isNaN(budgetValue) || budgetValue < 0) {
-          return res.status(400).json({ 
-            error: 'budget must be a non-negative number or null' 
+          return res.status(400).json({
+            error: 'budget must be a non-negative number or null'
           });
         }
         updates.push(`budget = $${paramIndex}`);
@@ -484,8 +484,8 @@ export const updateTrip = async (req, res) => {
       if (max_travel_time_min !== null) {
         const travelTime = parseInt(max_travel_time_min, 10);
         if (isNaN(travelTime) || travelTime < 0) {
-          return res.status(400).json({ 
-            error: 'max_travel_time_min must be a non-negative integer or null' 
+          return res.status(400).json({
+            error: 'max_travel_time_min must be a non-negative integer or null'
           });
         }
         updates.push(`max_travel_time_min = $${paramIndex}`);
@@ -508,8 +508,8 @@ export const updateTrip = async (req, res) => {
       if (current_lat !== null) {
         const lat = parseFloat(current_lat);
         if (isNaN(lat) || lat < -90 || lat > 90) {
-          return res.status(400).json({ 
-            error: 'current_lat must be a number between -90 and 90 or null' 
+          return res.status(400).json({
+            error: 'current_lat must be a number between -90 and 90 or null'
           });
         }
         updates.push(`current_lat = $${paramIndex}`);
@@ -524,8 +524,8 @@ export const updateTrip = async (req, res) => {
       if (current_lng !== null) {
         const lng = parseFloat(current_lng);
         if (isNaN(lng) || lng < -180 || lng > 180) {
-          return res.status(400).json({ 
-            error: 'current_lng must be a number between -180 and 180 or null' 
+          return res.status(400).json({
+            error: 'current_lng must be a number between -180 and 180 or null'
           });
         }
         updates.push(`current_lng = $${paramIndex}`);
@@ -549,8 +549,8 @@ export const updateTrip = async (req, res) => {
       if (local_hour_last_seen !== null) {
         const hour = parseInt(local_hour_last_seen, 10);
         if (isNaN(hour) || hour < 0 || hour > 23) {
-          return res.status(400).json({ 
-            error: 'local_hour_last_seen must be an integer between 0 and 23 or null' 
+          return res.status(400).json({
+            error: 'local_hour_last_seen must be an integer between 0 and 23 or null'
           });
         }
         updates.push(`local_hour_last_seen = $${paramIndex}`);
@@ -567,8 +567,8 @@ export const updateTrip = async (req, res) => {
       if (day_of_week_last_seen !== null) {
         const day = parseInt(day_of_week_last_seen, 10);
         if (isNaN(day) || day < 0 || day > 6) {
-          return res.status(400).json({ 
-            error: 'day_of_week_last_seen must be an integer between 0 and 6 or null' 
+          return res.status(400).json({
+            error: 'day_of_week_last_seen must be an integer between 0 and 6 or null'
           });
         }
         updates.push(`day_of_week_last_seen = $${paramIndex}`);
@@ -582,7 +582,7 @@ export const updateTrip = async (req, res) => {
 
     // Check if any fields to update
     if (updates.length === 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'No fields provided to update. Provide at least one updatable trip field.'
       });
     }
@@ -594,8 +594,8 @@ export const updateTrip = async (req, res) => {
       const start = new Date(start_date);
       const end = new Date(end_date);
       if (end < start) {
-        return res.status(400).json({ 
-          error: 'end_date must be greater than or equal to start_date' 
+        return res.status(400).json({
+          error: 'end_date must be greater than or equal to start_date'
         });
       }
       finalStartDate = start.toISOString().split('T')[0];
@@ -606,17 +606,17 @@ export const updateTrip = async (req, res) => {
         'SELECT user_id, start_date, end_date FROM trips WHERE trip_id = $1',
         [tripId]
       );
-      
-      const currentStart = start_date !== undefined 
-        ? new Date(start_date) 
+
+      const currentStart = start_date !== undefined
+        ? new Date(start_date)
         : new Date(currentTrip.rows[0].start_date);
-      const currentEnd = end_date !== undefined 
-        ? new Date(end_date) 
+      const currentEnd = end_date !== undefined
+        ? new Date(end_date)
         : new Date(currentTrip.rows[0].end_date);
-      
+
       if (currentEnd < currentStart) {
-        return res.status(400).json({ 
-          error: 'end_date must be greater than or equal to start_date' 
+        return res.status(400).json({
+          error: 'end_date must be greater than or equal to start_date'
         });
       }
       finalStartDate = currentStart.toISOString().split('T')[0];
@@ -650,7 +650,7 @@ export const updateTrip = async (req, res) => {
 
     // Add updated_at timestamp
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
-    
+
     // Add trip_id to values for WHERE clause
     values.push(tripId);
 
@@ -700,11 +700,11 @@ export const updateTrip = async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating trip:', error);
-    
+
     // Handle check constraint violation (date range)
     if (error.code === '23514') {
-      return res.status(400).json({ 
-        error: 'Invalid date range: end_date must be greater than or equal to start_date' 
+      return res.status(400).json({
+        error: 'Invalid date range: end_date must be greater than or equal to start_date'
       });
     }
 
@@ -998,6 +998,10 @@ export const getNextActivity = async (req, res) => {
 
     const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
     const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
+    
+    // Support DevTools time simulation
+    const mockTimeStr = req.query.mock_time;
+    const currentTimeObj = mockTimeStr ? new Date(mockTimeStr) : new Date();
 
     // Handle specific Utility Needs bypassing cache
     const specificNeed = req.query.specific_need;
@@ -1015,10 +1019,10 @@ export const getNextActivity = async (req, res) => {
           lat: current_lat,
           lng: current_lng,
           location_id: locationId,
-          current_hour: new Date().getHours(),
+          current_hour: currentTimeObj.getHours(),
           limit: 1
         });
-        
+
         const utilList = utilRes.data;
         if (utilList && utilList.length > 0) {
           const attr = utilList[0];
@@ -1063,7 +1067,7 @@ export const getNextActivity = async (req, res) => {
           user_id: trip.user_id,
           trip_id: tripId,
           current_location: { lat: current_lat, lng: current_lng },
-          current_time: new Date().toISOString()
+          current_time: currentTimeObj.toISOString()
         });
         const data = recRes.data;
         tripRecommendationsCache.set(tripId, { results: data, currentIndex: 0, fetchedAt: Date.now() });
@@ -1075,14 +1079,14 @@ export const getNextActivity = async (req, res) => {
     }
 
     if (!cached || !cached.results || cached.results.length === 0) {
-       return res.status(404).json({ error: 'No recommendations available right now.' });
+      return res.status(404).json({ error: 'No recommendations available right now.' });
     }
 
     const nextRec = cached.results[cached.currentIndex];
     cached.currentIndex++;
     const attr = nextRec.attraction;
     const cacheAgeSeconds = Math.round((Date.now() - cached.fetchedAt) / 1000);
-    
+
     res.json({
       activity: {
         id: attr.place_id || attr.activity_id,
@@ -1119,7 +1123,7 @@ export const skipTripActivity = async (req, res) => {
   try {
     const tripId = parseInt(req.params.id, 10);
     const { place_id } = req.body;
-    
+
     if (!place_id) return res.status(400).json({ error: 'place_id is required' });
 
     const tripCheck = await usersDb.query('SELECT user_id FROM trips WHERE trip_id = $1', [tripId]);
@@ -1128,17 +1132,17 @@ export const skipTripActivity = async (req, res) => {
 
     const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
     const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
-    
+
     try {
       await axios.post(`http://${engineHost}:8000/recommendations/feedback`, {
         user_id: userId, trip_id: tripId, place_id, action: 'skipped'
       });
-    } catch(err) {
+    } catch (err) {
       console.error("Error sending skip feedback to engine:", err.message);
     }
 
     res.json({ message: 'Activity skipped' });
-  } catch(error) {
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
