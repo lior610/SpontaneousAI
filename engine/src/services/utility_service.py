@@ -17,7 +17,7 @@ UTILITY_CATEGORY_MAP = {
     "grocery": ['Grocery Store', 'Organic Grocery', 'Big Box Store', 'Fruit and Vegetable Store', 'Butcher', 'Cheese Store', 'Food and Beverage Retail', 'Dairy Store', 'Imported Food Store', 'Supermarket', 'Health Food Store'],
     "convenience": ['Convenience Store', 'Snack Place', 'Newsstand', 'Newsagent', 'Discount Store', 'Liquor Store', 'Miscellaneous Store', 'Department Store', 'Retail', 'Stationery Store', 'Post Office', 'Smoke Shop', 'Florist', 'Hardware Store'],
     "police_emergency": ['Police Station', 'Fire Station', 'Ambulance Service'],
-    "food": ['Restaurant', 'Cafe', 'Coffee Shop', 'Bakery', 'Pizza Place', 'Diner', 'Seafood Restaurant', 'Steakhouse', 'Burger Joint', 'Sushi Restaurant', 'Noodle House', 'BBQ Joint', 'Breakfast Spot', 'Sandwich Shop', 'Ice Cream Shop']
+    "food": ['Restaurant', 'Cafe', 'Café', 'Coffee Shop', 'Bakery', 'Pizza Place', 'Pizzeria', 'Diner', 'Seafood Restaurant', 'Steakhouse', 'Burger Joint', 'Sushi Restaurant', 'Noodle House', 'BBQ Joint', 'Breakfast Spot', 'Sandwich Shop', 'Sandwich Spot', 'Ice Cream Shop', 'Deli', 'Bagel Shop', 'Fried Chicken Joint', 'Wings Joint']
 }
 
 # Food lives in the attractions table (type='attraction'), not in utilities
