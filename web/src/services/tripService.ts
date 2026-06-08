@@ -196,7 +196,7 @@ export async function fetchNextActivity(tripId?: number, specificNeed?: string):
 export async function completeActivity(
   tripId: number,
   activity: Activity,
-  feedback: Activity['feedback']
+  options: { arrivedAt?: string | null; feedback?: Activity['feedback'] } = {}
 ): Promise<void> {
   if (!tripId || Number.isNaN(tripId)) {
     throw new Error('Missing trip id for activity completion');
@@ -213,7 +213,8 @@ export async function completeActivity(
       cost: activity.cost,
       rating: activity.rating,
       review_count: activity.reviewCount,
-      feedback,
+      feedback: options.feedback ?? null,
+      arrived_at: options.arrivedAt ?? null,
       completed_at: new Date().toISOString(),
       place_id: activity.id,
       lat: activity.lat,

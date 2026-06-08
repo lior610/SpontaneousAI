@@ -3,26 +3,16 @@
  */
 
 import * as usersDb from '../db/usersConnection.js';
-import { pool as attractionsDb } from '../db/attractionsConnection.js';
+import * as attractionsDb from '../db/attractionsConnection.js';
 import axios from 'axios';
 import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedding.js';
 import * as locationService from '../services/locationService.js';
 import { checkFoodIntercept, dismissFoodSuggestion, getNextFoodSuggestion, refillAndGetFood } from '../services/foodInterceptService.js';
+import { getRecommendedStayMinutes } from '../services/recommendedStay.js';
 
-// Maps a destination name to its location_id in the attractions DB.
-// Falls back to 1 as a last-resort default if lookup fails.
-async function resolveLocationId(destination) {
-  try {
-    const { rows } = await attractionsDb.query(
-      `SELECT id FROM locations WHERE LOWER(name) = LOWER($1) LIMIT 1`,
-      [destination]
-    );
-    return rows.length > 0 ? rows[0].id : 1;
-  } catch (err) {
-    console.error(`[resolveLocationId] DB lookup failed for "${destination}", falling back to 1:`, err.message);
-    return 1;
-  }
-}
+// If a visitor stays less than this fraction of the LLM-recommended duration,
+// we infer they didn't enjoy the attraction.
+const STAY_DISLIKE_RATIO = parseFloat(process.env.STAY_DISLIKE_RATIO) || 0.5;
 
 // In-memory cache to hold arrays of recommendations returned by the Engine
 const tripRecommendationsCache = new Map();
@@ -773,6 +763,7 @@ export const completeTripActivity = async (req, res) => {
       review_count,
       feedback,
       completed_at,
+      arrived_at,
       place_id,
       lat,
       lng
@@ -799,14 +790,67 @@ export const completeTripActivity = async (req, res) => {
       return res.status(400).json({ error: 'review_count must be a non-negative integer' });
     }
 
+    let arrivedAt = null;
+    if (arrived_at) {
+      const parsedArrived = new Date(arrived_at);
+      if (!isNaN(parsedArrived.getTime())) arrivedAt = parsedArrived;
+    }
+
+    // How long the visitor actually stayed (arrival -> completion), in minutes.
+    let durationMinutes = null;
+    if (arrivedAt) {
+      const diffMs = completedAt.getTime() - arrivedAt.getTime();
+      if (diffMs >= 0) durationMinutes = Math.round(diffMs / 60000);
+    }
+
+    // Explicit choice from the popup ("Like" / "Skip") sets feedback.liked directly.
+    // The "Next" choice sends no explicit liked value — in that case we ask the LLM how
+    // long a visitor should stay (cached per attraction) and infer whether the user
+    // enjoyed it by comparing actual dwell time vs. the expected duration.
+    let recommendedStayMinutes = null;
+    let derivedFeedback = feedback ? { ...feedback } : null;
+    const hasExplicitLiked = feedback && typeof feedback.liked === 'boolean';
+
+    if (!hasExplicitLiked && durationMinutes != null) {
+      recommendedStayMinutes = await getRecommendedStayMinutes({
+        placeId: place_id,
+        name: title,
+        category,
+        description,
+        address,
+      });
+
+      // Location tracking only infers a NEGATIVE signal: a short stay means the user
+      // likely didn't enjoy it. Staying long enough does NOT imply they liked it —
+      // in that case we leave `liked` unset (null/neutral, logged as a plain visit).
+      if (recommendedStayMinutes != null && durationMinutes < recommendedStayMinutes * STAY_DISLIKE_RATIO) {
+        derivedFeedback = {
+          ...(derivedFeedback || {}),
+          liked: false,
+          autoDetected: true,
+        };
+      }
+    }
+
+    // Always record the measured dwell time (and recommended stay, if we looked it up).
+    if (durationMinutes != null) {
+      derivedFeedback = {
+        ...(derivedFeedback || {}),
+        durationMinutes,
+        ...(recommendedStayMinutes != null ? { recommendedStayMinutes } : {}),
+      };
+    }
+
     const result = await usersDb.query(
       `INSERT INTO trip_activity_logs (
          trip_id, title, description, category, address, estimated_time, cost,
-         rating, review_count, feedback, completed_at
+         rating, review_count, feedback, place_id, arrived_at, duration_minutes,
+         recommended_stay_minutes, completed_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15)
        RETURNING id, trip_id, title, description, category, address, estimated_time, cost,
-         rating, review_count, feedback, completed_at, created_at`,
+         rating, review_count, feedback, place_id, arrived_at, duration_minutes,
+         recommended_stay_minutes, completed_at, created_at`,
       [
         tripId,
         title,
@@ -817,7 +861,11 @@ export const completeTripActivity = async (req, res) => {
         cost || null,
         parsedRating,
         parsedReviewCount,
-        feedback ? JSON.stringify(feedback) : null,
+        derivedFeedback ? JSON.stringify(derivedFeedback) : null,
+        place_id || null,
+        arrivedAt ? arrivedAt.toISOString() : null,
+        durationMinutes,
+        recommendedStayMinutes,
         completedAt.toISOString(),
       ]
     );
@@ -831,9 +879,9 @@ export const completeTripActivity = async (req, res) => {
 
       if (userId) {
         let action = 'visited';
-        if (feedback) {
-          if (feedback.liked === true) action = 'liked';
-          else if (feedback.liked === false) action = 'skipped';
+        if (derivedFeedback) {
+          if (derivedFeedback.liked === true) action = 'liked';
+          else if (derivedFeedback.liked === false) action = 'skipped';
         }
 
         try {
@@ -870,6 +918,10 @@ export const completeTripActivity = async (req, res) => {
         rating: row.rating != null ? parseFloat(row.rating) : null,
         review_count: row.review_count,
         feedback: row.feedback,
+        place_id: row.place_id,
+        arrived_at: row.arrived_at,
+        duration_minutes: row.duration_minutes,
+        recommended_stay_minutes: row.recommended_stay_minutes,
         completed_at: row.completed_at,
         created_at: row.created_at,
       },
@@ -891,7 +943,8 @@ export const getTripActivities = async (req, res) => {
     const { completed } = req.query;
     let query = `
       SELECT id, trip_id, title, description, category, address, estimated_time, cost,
-             rating, review_count, feedback, completed_at, created_at
+             rating, review_count, feedback, place_id, arrived_at, duration_minutes,
+             recommended_stay_minutes, completed_at, created_at
       FROM trip_activity_logs
       WHERE trip_id = $1
     `;
@@ -916,6 +969,10 @@ export const getTripActivities = async (req, res) => {
       rating: row.rating != null ? parseFloat(row.rating) : null,
       review_count: row.review_count,
       feedback: row.feedback,
+      place_id: row.place_id,
+      arrived_at: row.arrived_at,
+      duration_minutes: row.duration_minutes,
+      recommended_stay_minutes: row.recommended_stay_minutes,
       completed_at: row.completed_at,
       created_at: row.created_at,
     }));
@@ -959,7 +1016,13 @@ export const getNextActivity = async (req, res) => {
     // Utility needs (pharmacy, grocery, etc.) bypass the recommendation cache entirely
     if (specificNeed) {
       try {
-        const locationId = await resolveLocationId(trip.destination);
+        // Resolve the correct location_id from the trip's destination
+        const locationResult = await attractionsDb.pool.query(
+          'SELECT id FROM locations WHERE LOWER(name) = LOWER($1)',
+          [trip.destination]
+        );
+        const locationId = locationResult.rows.length > 0 ? locationResult.rows[0].id : 1;
+
         const utilRes = await axios.post(`http://${engineHost}:8000/utilities/closest`, {
           parent_category: specificNeed,
           lat: current_lat,
