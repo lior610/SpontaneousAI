@@ -18,6 +18,7 @@ CMD ["npm", "run", "dev"]
 # ==========================================
 FROM base AS build
 COPY web/ .
+COPY .env /.env
 COPY .env /app/.env
 RUN npm run build
 
