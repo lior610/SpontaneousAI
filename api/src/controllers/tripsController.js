@@ -7,7 +7,7 @@ import * as attractionsDb from '../db/attractionsConnection.js';
 import axios from 'axios';
 import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedding.js';
 import * as locationService from '../services/locationService.js';
-import { checkFoodIntercept, dismissFoodSuggestion, getNextFoodSuggestion, refillAndGetFood } from '../services/foodInterceptService.js';
+import { checkFoodIntercept, dismissFoodSuggestion, getNextFoodSuggestion, refillAndGetFood, clearLlmDeclineCooldown } from '../services/foodInterceptService.js';
 import { getRecommendedStayMinutes } from '../services/recommendedStay.js';
 
 // If a visitor stays less than this fraction of the LLM-recommended duration,
@@ -903,6 +903,10 @@ export const completeTripActivity = async (req, res) => {
     // Invalidate the recommendation cache so the next getNextActivity fetches a
     // fresh batch — the user's location, time, and preferences (EMA) have changed.
     tripRecommendationsCache.delete(tripId);
+
+    // A completed activity changes the food-gate context, so let the LLM be consulted
+    // again even if it previously declined (suppressed only across plain skips).
+    clearLlmDeclineCooldown(tripId);
 
     res.status(201).json({
       message: 'Activity completion saved',

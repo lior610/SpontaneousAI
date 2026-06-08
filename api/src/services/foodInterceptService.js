@@ -12,17 +12,19 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from 'axios';
 import * as usersDb from '../db/usersConnection.js';
 
-const FOOD_COOLDOWN_MS = parseInt(process.env.FOOD_COOLDOWN_MS, 10) || 3600000;
-const ACTIVITY_THRESHOLD = parseInt(process.env.FOOD_GATE_ACTIVITY_THRESHOLD, 10) || 2;
-const HOURS_THRESHOLD = parseFloat(process.env.FOOD_GATE_HOURS_THRESHOLD) || 3.5;
+const FOOD_COOLDOWN_MS = Number.isNaN(parseInt(process.env.FOOD_COOLDOWN_MS, 10)) ? 3600000 : parseInt(process.env.FOOD_COOLDOWN_MS, 10);
+const ACTIVITY_THRESHOLD = Number.isNaN(parseInt(process.env.FOOD_ACTIVITY_THRESHOLD, 10)) ? 2 : parseInt(process.env.FOOD_ACTIVITY_THRESHOLD, 10);
+const HOURS_THRESHOLD = Number.isNaN(parseFloat(process.env.FOOD_HOURS_THRESHOLD)) ? 3 : parseFloat(process.env.FOOD_HOURS_THRESHOLD);
 const FOOD_INTERCEPT_ENABLED = process.env.FOOD_INTERCEPT_ENABLED !== 'false';
 
 // Singleton Gemini client — avoids re-instantiating on every LLM call
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
 const geminiModel = genAI?.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-// In-memory state: cooldowns after dismiss, and cached food batches per trip
+// In-memory state: cooldowns after dismiss, cooldowns after the LLM declines, and
+// cached food batches per trip
 const foodDismissalCooldowns = new Map();
+const foodLlmDeclineCooldowns = new Map();
 const foodBatchCache = new Map();
 
 // Periodic cleanup so these maps don't grow unbounded
@@ -31,6 +33,11 @@ setInterval(() => {
   for (const [tripId, entry] of foodDismissalCooldowns) {
     if (now - entry.dismissedAt > FOOD_COOLDOWN_MS * 2) {
       foodDismissalCooldowns.delete(tripId);
+    }
+  }
+  for (const [tripId, entry] of foodLlmDeclineCooldowns) {
+    if (now - entry.declinedAt > FOOD_COOLDOWN_MS * 2) {
+      foodLlmDeclineCooldowns.delete(tripId);
     }
   }
   for (const [tripId, entry] of foodBatchCache) {
@@ -73,6 +80,12 @@ export function dismissFoodSuggestion(tripId) {
   foodBatchCache.delete(tripId);
 }
 
+// Completing a real activity changes the gate context (one more activity done, time
+// elapsed), so allow the LLM to be consulted again on the next intercept check.
+export function clearLlmDeclineCooldown(tripId) {
+  foodLlmDeclineCooldowns.delete(tripId);
+}
+
 export function getNextFoodSuggestion(tripId, position) {
   const foodPlace = getNextFoodFromBatch(tripId);
   if (!foodPlace || !foodPlace.name) return null;
@@ -92,6 +105,15 @@ function isInCooldown(tripId) {
   const entry = foodDismissalCooldowns.get(tripId);
   if (!entry) return false;
   return (Date.now() - entry.dismissedAt) < FOOD_COOLDOWN_MS;
+}
+
+// After the LLM declines, the gate conditions barely change between requests (a skip
+// logs no activity, time advances by seconds), so re-asking on every "get another
+// suggestion" just burns LLM calls for the same "no". Suppress the LLM for a cooldown.
+function isInLlmDeclineCooldown(tripId) {
+  const entry = foodLlmDeclineCooldowns.get(tripId);
+  if (!entry) return false;
+  return (Date.now() - entry.declinedAt) < FOOD_COOLDOWN_MS;
 }
 
 function getLocalTime(trip) {
@@ -140,15 +162,24 @@ function evaluateGateConditions(localHour, localMinute, todayActivities, lastFoo
 
 // Asks Gemini for a yes/no on whether a food break makes sense right now.
 // Returns false on any error so we gracefully skip the intercept.
-async function callLlmValidation(localTimeStr, todayActivities, lastFoodActivity) {
+async function callLlmValidation(localTimeStr, todayActivities, lastFoodActivity, tz) {
   if (!geminiModel) return false;
 
+  // Render every clock time in the trip's local zone so the prompt is internally
+  // consistent with "Current local time" below (which getLocalTime already derives in
+  // tz). Without an explicit timeZone, toLocaleTimeString uses the server's zone and
+  // the LLM would see activity times on a different clock than the current time.
+  const fmtLocalTime = (value) =>
+    new Date(value).toLocaleTimeString('en-US', {
+      timeZone: tz || 'UTC', hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+
   const activitiesList = todayActivities
-    .map(a => `- ${a.title} (${a.category}) at ${new Date(a.completed_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`)
+    .map(a => `- ${a.title} (${a.category}) at ${fmtLocalTime(a.completed_at)}`)
     .join('\n');
 
   const lastFoodStr = lastFoodActivity
-    ? `${lastFoodActivity.title} at ${new Date(lastFoodActivity.completed_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`
+    ? `${lastFoodActivity.title} at ${fmtLocalTime(lastFoodActivity.completed_at)}`
     : 'None today';
 
   const prompt = `You are a trip assistant. Decide if suggesting a food break is appropriate. Respond ONLY "yes" or "no".
@@ -205,15 +236,24 @@ export async function checkFoodIntercept(tripId, trip, position) {
   if (!FOOD_INTERCEPT_ENABLED) return { triggered: false };
   if (!position) return { triggered: false };
   if (isInCooldown(tripId)) return { triggered: false };
+  if (isInLlmDeclineCooldown(tripId)) return { triggered: false };
 
   try {
     const { hour, minute, localStr } = getLocalTime(trip);
 
-    // Get today's completed activities to evaluate gate conditions
+    // Get this trip's completed activities for *today only*, in the trip's local
+    // timezone, to evaluate gate conditions. Both sides of the date comparison are
+    // converted to the same zone — consistent with how the rest of this flow derives
+    // local time (getLocalTime above, and the engine's astimezone). Comparing the raw
+    // completed_at::date (Postgres session TZ — UTC in prod) against a trip-local
+    // "today" would shift the day boundary by the trip's UTC offset and leak the wrong
+    // day's activities into the LLM prompt.
     const todayResult = await usersDb.query(
       `SELECT title, category, completed_at
        FROM trip_activity_logs
-       WHERE trip_id = $1 AND completed_at::date = (NOW() AT TIME ZONE COALESCE($2, 'UTC'))::date
+       WHERE trip_id = $1
+         AND (completed_at AT TIME ZONE COALESCE($2, 'UTC'))::date
+             = (NOW() AT TIME ZONE COALESCE($2, 'UTC'))::date
        ORDER BY completed_at ASC`,
       [tripId, trip.timezone || 'UTC']
     );
@@ -224,16 +264,24 @@ export async function checkFoodIntercept(tripId, trip, position) {
       return { triggered: false };
     }
 
-    const llmApproved = await callLlmValidation(localStr, todayActivities, lastFoodActivity);
+    const llmApproved = await callLlmValidation(localStr, todayActivities, lastFoodActivity, trip.timezone || 'UTC');
     if (!llmApproved) {
-      console.log('[FoodIntercept] LLM declined food suggestion, continuing normal flow');
+      // Record the decline so we don't re-ask the LLM on every "get another suggestion".
+      // A plain skip logs no activity and advances time by seconds, so the gate would
+      // keep passing and we'd re-ask for the same "no". Completing a real activity clears
+      // this (see clearLlmDeclineCooldown) so a changed context can be re-evaluated.
+      foodLlmDeclineCooldowns.set(tripId, { declinedAt: Date.now() });
+      console.log('[FoodIntercept] LLM declined food suggestion, suppressing for cooldown, continuing normal flow');
       return { triggered: false };
     }
 
     console.log('[FoodIntercept] LLM approved, fetching food batch from engine...');
     const batch = await fetchFoodBatch(trip, position);
     if (batch.length === 0) {
-      console.log('[FoodIntercept] No food places found, continuing normal flow');
+      // No food to serve right now — suppress further checks for the cooldown so the next
+      // "get another suggestion" doesn't re-approve via the LLM only to find nothing again.
+      foodLlmDeclineCooldowns.set(tripId, { declinedAt: Date.now() });
+      console.log('[FoodIntercept] No food places found, suppressing for cooldown, continuing normal flow');
       return { triggered: false };
     }
     console.log(`[FoodIntercept] Got ${batch.length} food suggestions, serving first`);
