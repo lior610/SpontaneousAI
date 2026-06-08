@@ -1,7 +1,10 @@
 services:
   # 1. Attraction Engine (Python)
   engine:
-    build: ./engine
+    build:
+      context: .
+      dockerfile: ./engine/Dockerfile
+      target: development
     ports:
       - "8000:8000"
     env_file: .env
@@ -14,7 +17,9 @@ services:
 
   # 2. API (Node.js)
   api:
-    build: ./api
+    build:
+      context: ./api
+      target: development
     ports:
       - "3000:3000"
     env_file: .env
@@ -28,7 +33,10 @@ services:
     command: npm run dev
 
   web:
-    build: ./web
+    build:
+      context: .
+      dockerfile: ./web/Dockerfile
+      target: development
     ports:
       - "5173:5173"
     env_file: .env

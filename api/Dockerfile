@@ -1,13 +1,21 @@
-FROM node:18-alpine
-
+# ==========================================
+# 1. Base Stage
+# ==========================================
+FROM node:18-alpine AS base
 WORKDIR /app
-
-# Install dependencies first (better caching)
 COPY package.json package-lock.json* ./
 RUN npm install
 
-# Copy source code
+# ==========================================
+# 2. Development Stage
+# ==========================================
+FROM base AS development
 COPY . .
-
-# Default command
 CMD ["npm", "run", "dev"]
+
+# ==========================================
+# 3. Production Stage
+# ==========================================
+FROM base AS production
+COPY . .
+CMD ["npm", "start"]
