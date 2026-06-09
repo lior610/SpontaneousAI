@@ -1,5 +1,7 @@
-FROM python:3.11-slim
-
+# ==========================================
+# 1. Base Stage
+# ==========================================
+FROM python:3.11-slim AS base
 WORKDIR /app
 
 # Install system dependencies
@@ -9,15 +11,24 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY requirements.txt .
+COPY data-pipeline/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the code
-COPY . .
-
-# Set PYTHONPATH so imports work correctly
 ENV PYTHONPATH=/app:/shared-python
 
-# Default command (can be overridden by docker-compose)
+# ==========================================
+# 2. Development Stage
+# ==========================================
+FROM base AS development
+COPY data-pipeline/ .
+# In dev, shared-python is mounted via docker-compose volume
+CMD ["python", "src/main.py"]
+
+# ==========================================
+# 3. Production Stage
+# ==========================================
+FROM base AS production
+COPY data-pipeline/ .
+COPY shared/python /shared-python
 CMD ["python", "src/main.py"]
 

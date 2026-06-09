@@ -1,0 +1,38 @@
+services:
+  # 1. Attraction Engine (Python)
+  engine:
+    build:
+      context: .
+      dockerfile: ./engine/Dockerfile
+      target: production
+    ports:
+      - "8000:8000"
+    env_file: .env
+
+  # 2. API (Node.js)
+  api:
+    build:
+      context: ./api
+      target: production
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      - ENGINE_HOST=engine
+    depends_on:
+      - engine
+
+  # 3. Web Frontend (Nginx serving built assets)
+  web:
+    build:
+      context: .
+      dockerfile: ./web/Dockerfile
+      target: production
+    ports:
+      - "80:80"
+      - "443:443"
+    env_file: .env
+    volumes:
+      - /etc/ssl/cs:/etc/ssl/cs:ro
+    depends_on:
+      - api

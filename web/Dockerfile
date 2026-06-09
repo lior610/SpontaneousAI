@@ -1,13 +1,34 @@
-FROM node:18-alpine
-
+# ==========================================
+# 1. Base Stage
+# ==========================================
+FROM node:18-alpine AS base
 WORKDIR /app
-
-# Install dependencies first (better caching)
-COPY package.json package-lock.json* ./
+COPY web/package.json web/package-lock.json* ./
 RUN npm install
 
-# Copy source code
-COPY . .
-
-# Default command
+# ==========================================
+# 2. Development Stage
+# ==========================================
+FROM base AS development
+COPY web/ .
 CMD ["npm", "run", "dev"]
+
+# ==========================================
+# 3. Build Stage
+# ==========================================
+FROM base AS build
+COPY web/ .
+COPY .env /.env
+COPY .env /app/.env
+RUN npm run build
+
+# ==========================================
+# 4. Production Stage
+# ==========================================
+FROM nginx:alpine AS production
+# Copy the built assets from the build stage
+COPY --from=build /app/dist /usr/share/nginx/html
+# Copy the custom nginx configuration
+COPY web/nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80 443
+CMD ["nginx", "-g", "daemon off;"]
