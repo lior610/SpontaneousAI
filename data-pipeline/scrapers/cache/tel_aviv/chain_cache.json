@@ -1,0 +1,665 @@
+{
+  "Aroma (ארומה)": [
+    {
+      "budget": "40",
+      "hours": "07:00-18:00",
+      "desc": "A quiet, professional hub in the business district frequented by workers grabbing a quick espresso, though consistency of service is often debated by locals."
+    },
+    {
+      "budget": "40",
+      "hours": "08:00-00:00",
+      "desc": "A lively, late-night urban hangout popular with students and night owls, despite frequent overcrowding and long wait times for basic orders."
+    },
+    {
+      "budget": "40",
+      "hours": "06:00-22:00",
+      "desc": "A high-traffic transit-adjacent location serving a transient crowd, often criticized for a rushed atmosphere and lackluster maintenance of the seating area."
+    }
+  ],
+  "Sui Sushi Bar": [
+    {
+      "budget": "150",
+      "hours": "12:00-23:00",
+      "desc": "A minimalist sushi spot frequented by young professionals, often criticized for inconsistent service despite high-quality fish."
+    },
+    {
+      "budget": "150",
+      "hours": "17:00-00:00",
+      "desc": "This energetic sushi bar attracts a trendy evening crowd and maintains a solid reputation for its creative rolls."
+    },
+    {
+      "budget": "150",
+      "hours": "11:00-22:00",
+      "desc": "A casual sushi establishment popular with local families, known for reliable standards but occasionally cramped seating."
+    }
+  ],
+  "Delicatessen": [
+    {
+      "budget": "120",
+      "hours": "07:00-20:00",
+      "desc": "A bustling gourmet bakery and deli favored by foodies, though often faulted for long queues and premium pricing."
+    },
+    {
+      "budget": "120",
+      "hours": "08:00-22:00",
+      "desc": "This upscale market-style eatery draws a sophisticated crowd and is widely praised for its high-quality pastries and prepared foods."
+    },
+    {
+      "budget": "120",
+      "hours": "09:00-18:00",
+      "desc": "A refined bakery atmosphere that attracts a quiet morning clientele, consistently recognized for its artisanal bread quality."
+    }
+  ],
+  "Roladin": [
+    {
+      "budget": "60",
+      "hours": "07:00-21:00",
+      "desc": "A ubiquitous bakery chain packed with locals, generally criticized for its overly sweet commercialized pastry options."
+    },
+    {
+      "budget": "60",
+      "hours": "08:00-22:00",
+      "desc": "This busy coffee shop serves a diverse suburban crowd and is known for its seasonal menu variety rather than culinary depth."
+    },
+    {
+      "budget": "60",
+      "hours": "06:30-20:00",
+      "desc": "A fast-paced cafe popular for quick morning stops, often viewed as a reliable but standard industrial bakery experience."
+    }
+  ],
+  "Vaniglia": [
+    {
+      "budget": "20",
+      "hours": "10:00-22:00",
+      "desc": "A clean, modern ice cream parlor frequented by families and couples, known for high-quality ingredients and a wide variety of artisanal flavors."
+    },
+    {
+      "budget": "20",
+      "hours": "11:00-23:00",
+      "desc": "This popular parlor maintains a bright and welcoming vibe, attracting dessert lovers who appreciate consistent, premium-grade gelato."
+    },
+    {
+      "budget": "20",
+      "hours": "12:00-00:00",
+      "desc": "Located in a busy area, this shop serves a steady stream of tourists and locals who value the shop's reputable, high-end ice cream selection."
+    }
+  ],
+  "Cofix / קופיקס": [
+    {
+      "budget": "20",
+      "hours": "07:00-19:00",
+      "desc": "A high-traffic budget cafe aimed at commuters, widely known for its extremely low price point and functional, basic quality."
+    },
+    {
+      "budget": "20",
+      "hours": "08:00-20:00",
+      "desc": "This no-frills coffee stall serves a transient crowd, often criticized for poor coffee quality but appreciated for its convenience."
+    },
+    {
+      "budget": "20",
+      "hours": "06:00-22:00",
+      "desc": "A utilitarian coffee spot that attracts students and budget-conscious workers, recognized primarily for its essential and affordable offerings."
+    }
+  ],
+  "סודוך": [
+    {
+      "budget": "50",
+      "hours": "10:00-02:00",
+      "desc": "A classic late-night sandwich joint frequented by students, known for its greasy, affordable comfort food rather than refinement."
+    },
+    {
+      "budget": "50",
+      "hours": "11:00-04:00",
+      "desc": "This high-volume sandwich shop is a staple for the post-party crowd, often criticized for its basic ingredients and chaotic service."
+    },
+    {
+      "budget": "50",
+      "hours": "09:00-00:00",
+      "desc": "A straightforward sandwich counter popular with workers, maintaining a reputation for quick, no-nonsense meals at a low cost."
+    }
+  ],
+  "Landwer Café (קפה לנדוור)": [
+    {
+      "budget": "90",
+      "hours": "08:00-23:00",
+      "desc": "A family-friendly coffee chain with a traditional vibe, often criticized for its large, somewhat uninspired menu."
+    },
+    {
+      "budget": "90",
+      "hours": "07:00-00:00",
+      "desc": "This bustling cafe attracts a mix of business people and retirees, known for its reliable service and consistent breakfast offerings."
+    },
+    {
+      "budget": "90",
+      "hours": "09:00-22:00",
+      "desc": "A mainstream cafe environment that draws a large neighborhood crowd, generally regarded as a safe and predictable dining choice."
+    }
+  ],
+  "Susu & Sons": [
+    {
+      "budget": "80",
+      "hours": "12:00-23:00",
+      "desc": "A trendy burger joint popular with urban hipsters, frequently praised for its high-quality beef but criticized for small portion sizes."
+    },
+    {
+      "budget": "80",
+      "hours": "11:00-01:00",
+      "desc": "This loud and energetic burger spot attracts a youthful crowd and is widely recognized for its minimalist, high-end approach to fast food."
+    },
+    {
+      "budget": "80",
+      "hours": "17:00-02:00",
+      "desc": "A popular late-night burger destination that maintains a strong reputation for consistency, despite often lengthy wait times."
+    }
+  ],
+  "תחנת לחם": [
+    {
+      "budget": "70",
+      "hours": "07:00-18:00",
+      "desc": "A traditional neighborhood bakery with a loyal following, well-regarded for its authentic sourdough and rustic loaves."
+    },
+    {
+      "budget": "70",
+      "hours": "08:00-19:00",
+      "desc": "This cozy bakery attracts morning commuters and residents, known for its warm atmosphere and high-quality, artisanal baked goods."
+    },
+    {
+      "budget": "70",
+      "hours": "06:00-17:00",
+      "desc": "A functional, small-scale bakery favored by locals for fresh morning breads, though it occasionally runs out of stock early."
+    }
+  ],
+  "Arcaffe (ארקפה)": [
+    {
+      "budget": "70",
+      "hours": "07:00-20:00",
+      "desc": "An upscale Italian-style cafe frequented by professionals, known for its sleek design and consistent, albeit pricey, espresso."
+    },
+    {
+      "budget": "70",
+      "hours": "08:00-22:00",
+      "desc": "This sophisticated cafe chain attracts a business-oriented crowd and is highly regarded for its refined atmosphere and quality pastries."
+    },
+    {
+      "budget": "70",
+      "hours": "09:00-21:00",
+      "desc": "A modern, minimalist cafe popular for meetings, often criticized for its high prices but praised for its reliable quality standards."
+    }
+  ],
+  "Hamalabiya": [
+    {
+      "budget": "15",
+      "hours": "10:00-23:00",
+      "desc": "A casual, street-facing spot popular with young locals for its affordable, no-frills malabi served in a lively atmosphere."
+    },
+    {
+      "budget": "15",
+      "hours": "11:00-00:00",
+      "desc": "This bustling dessert stand draws a late-night crowd looking for a quick, sweet bite in a straightforward, unpretentious setting."
+    },
+    {
+      "budget": "15",
+      "hours": "09:00-22:00",
+      "desc": "A minimalist dessert shop that caters to a diverse neighborhood demographic, consistently praised for its traditional recipe and reliable service."
+    }
+  ],
+  "Aldo": [
+    {
+      "budget": "20",
+      "hours": "10:00-23:00",
+      "desc": "A vibrant, family-oriented ice cream chain that offers a wide array of indulgent toppings and is generally seen as a reliable, commercial favorite."
+    },
+    {
+      "budget": "20",
+      "hours": "11:00-00:00",
+      "desc": "This high-traffic shop provides a colorful and energetic environment, catering to a broad crowd with its extensive and accessible dessert menu."
+    },
+    {
+      "budget": "20",
+      "hours": "09:00-22:00",
+      "desc": "A staple for casual treat-seekers, this location offers a standard, high-energy atmosphere that remains a popular choice for quick, sugary indulgences."
+    }
+  ],
+  "Bucke": [
+    {
+      "budget": "45",
+      "hours": "08:00-16:00",
+      "desc": "A trendy, rustic-style café that draws a hip, younger crowd and is widely recognized for its generous, wholesome breakfast platters."
+    },
+    {
+      "budget": "45",
+      "hours": "09:00-17:00",
+      "desc": "This neighborhood favorite offers a relaxed, communal atmosphere perfect for brunch enthusiasts seeking hearty, well-prepared morning meals."
+    },
+    {
+      "budget": "45",
+      "hours": "07:30-15:30",
+      "desc": "Known for its laid-back vibe and bustling morning activity, this café is a go-to spot for locals who appreciate a consistent and satisfying brunch experience."
+    }
+  ],
+  "Arkaffe": [
+    {
+      "budget": "30",
+      "hours": "07:00-20:00",
+      "desc": "An upscale, minimalist coffee house favored by professionals for its premium beans and refined, quiet atmosphere."
+    },
+    {
+      "budget": "30",
+      "hours": "08:00-21:00",
+      "desc": "This sophisticated café attracts a design-conscious crowd, offering a high-quality coffee experience in a sleek, modern setting."
+    },
+    {
+      "budget": "30",
+      "hours": "09:00-19:00",
+      "desc": "A serious coffee destination that maintains a calm, professional vibe, highly regarded by aficionados for its precision and expertise in roasting."
+    }
+  ],
+  "Cafelix": [
+    {
+      "budget": "25",
+      "hours": "07:00-18:00",
+      "desc": "A boutique coffee shop with an industrial-chic aesthetic that draws serious caffeine enthusiasts and local creatives alike."
+    },
+    {
+      "budget": "25",
+      "hours": "08:00-19:00",
+      "desc": "This small-batch roaster is well-regarded for its commitment to quality, offering a focused menu in a quiet, minimalist space."
+    },
+    {
+      "budget": "25",
+      "hours": "09:00-17:00",
+      "desc": "An unpretentious neighborhood hub that caters to coffee purists, maintaining a reputation for some of the best specialty roasts in the city."
+    }
+  ],
+  "Goocha": [
+    {
+      "budget": "120",
+      "hours": "12:00-23:00",
+      "desc": "A lively, bustling seafood brasserie that is popular with a diverse crowd for its fresh, accessible dishes and informal dining style."
+    },
+    {
+      "budget": "120",
+      "hours": "13:00-00:00",
+      "desc": "This high-energy restaurant is widely appreciated for its consistent quality, making it a reliable choice for casual yet satisfying seafood dinners."
+    },
+    {
+      "budget": "120",
+      "hours": "11:00-22:00",
+      "desc": "A neighborhood fixture known for its vibrant atmosphere and straightforward menu, attracting diners who value fresh fish in a relaxed, no-fuss setting."
+    }
+  ],
+  "Aroma": [
+    {
+      "budget": "35",
+      "hours": "06:00-23:00",
+      "desc": "A ubiquitous and efficient coffee chain that provides a predictable, functional environment for commuters and students across the city."
+    },
+    {
+      "budget": "35",
+      "hours": "07:00-00:00",
+      "desc": "This standard, high-volume cafe is a reliable urban staple, known for its consistent menu and accessible, casual seating areas."
+    },
+    {
+      "budget": "35",
+      "hours": "08:00-22:00",
+      "desc": "A go-to spot for quick bites and standard coffee, serving a broad mix of people in an unpretentious and highly functional setting."
+    }
+  ],
+  "Frame": [
+    {
+      "budget": "150",
+      "hours": "12:00-23:30",
+      "desc": "A trendy, upscale sushi restaurant with a sophisticated vibe that draws a fashionable crowd for its creative and well-executed rolls."
+    },
+    {
+      "budget": "150",
+      "hours": "13:00-00:00",
+      "desc": "This popular spot is known for its polished service and stylish decor, making it a top choice for diners seeking a contemporary Japanese-fusion experience."
+    },
+    {
+      "budget": "150",
+      "hours": "17:00-23:00",
+      "desc": "A sleek and energetic venue that consistently receives positive feedback for its high-quality ingredients and modern, elevated dining atmosphere."
+    }
+  ],
+  "Bechor Et Sushi": [
+    {
+      "budget": "100",
+      "hours": "11:00-22:00",
+      "desc": "A unique, long-standing institution that blends traditional Middle Eastern flavors with sushi in a casual, family-friendly environment."
+    },
+    {
+      "budget": "100",
+      "hours": "12:00-23:00",
+      "desc": "This quirky, popular spot is highly regarded by locals for its unconventional menu and authentic, unpretentious hospitality."
+    },
+    {
+      "budget": "100",
+      "hours": "10:00-21:00",
+      "desc": "A neighborhood favorite with a relaxed, eclectic vibe, praised for its consistency and the surprising success of its signature fusion concept."
+    }
+  ],
+  "Lechamim (לחמים)": [
+    {
+      "budget": "20",
+      "hours": "07:00-19:00",
+      "desc": "This busy bakery attracts locals seeking high-quality artisanal breads and pastries, though it often suffers from long queues and limited seating."
+    },
+    {
+      "budget": "20",
+      "hours": "07:30-18:00",
+      "desc": "A popular neighborhood spot known for its consistent sourdough and sweet treats, often crowded during morning rush hours."
+    },
+    {
+      "budget": "20",
+      "hours": "08:00-17:00",
+      "desc": "The bakery offers a reliable selection of baked goods in a functional, fast-paced environment that prioritizes volume over comfort."
+    }
+  ],
+  "Albert": [
+    {
+      "budget": "35",
+      "hours": "08:00-22:00",
+      "desc": "A classic diner-style venue that draws a casual crowd, offering standard comfort food with mixed reviews regarding service speed."
+    },
+    {
+      "budget": "35",
+      "hours": "09:00-23:00",
+      "desc": "This diner provides a nostalgic atmosphere for a diverse clientele, though the food quality can be inconsistent during peak hours."
+    },
+    {
+      "budget": "35",
+      "hours": "10:00-00:00",
+      "desc": "A straightforward diner catering to late-night diners, known for its unpretentious menu and functional, no-frills service."
+    }
+  ],
+  "McDonald's": [
+    {
+      "budget": "15",
+      "hours": "24/7",
+      "desc": "A globally standardized fast-food destination serving a transient crowd, widely recognized for predictable taste and efficiency."
+    },
+    {
+      "budget": "15",
+      "hours": "07:00-23:00",
+      "desc": "This high-traffic fast-food branch serves families and students, maintaining strict consistency despite frequent overcrowding."
+    },
+    {
+      "budget": "15",
+      "hours": "09:00-02:00",
+      "desc": "A ubiquitous burger joint that functions as a reliable, utilitarian stop for quick meals in a sterile, high-volume environment."
+    }
+  ],
+  "Bakery": [
+    {
+      "budget": "25",
+      "hours": "07:00-20:00",
+      "desc": "A trendy, upscale bakery frequented by the city's professionals, praised for its sophisticated pastry selection but criticized for its premium pricing."
+    },
+    {
+      "budget": "25",
+      "hours": "08:00-21:00",
+      "desc": "This polished bakery draws a stylish crowd with its aesthetically pleasing displays, though it is often packed and difficult to find a seat."
+    },
+    {
+      "budget": "25",
+      "hours": "07:30-19:30",
+      "desc": "Offering a refined take on traditional baked goods, this establishment is a staple for local foodies despite the often hectic service atmosphere."
+    }
+  ],
+  "גן הבנים": [
+    {
+      "budget": "0",
+      "hours": "06:00-20:00",
+      "desc": "A quiet public garden that provides a serene escape for families and joggers, though it lacks extensive amenities."
+    },
+    {
+      "budget": "0",
+      "hours": "07:00-22:00",
+      "desc": "This well-maintained urban park serves as a social hub for the neighborhood, occasionally becoming quite noisy during the weekends."
+    },
+    {
+      "budget": "0",
+      "hours": "08:00-19:00",
+      "desc": "A simple green space that offers basic seating and shade, favored by locals for its accessibility rather than its design."
+    }
+  ],
+  "EspressoBar (אספרסובר)": [
+    {
+      "budget": "20",
+      "hours": "07:00-23:00",
+      "desc": "A reliable neighborhood cafe that caters to remote workers and casual meetups, known for its standard coffee menu and functional layout."
+    },
+    {
+      "budget": "20",
+      "hours": "08:00-00:00",
+      "desc": "This cafe offers a steady, unremarkable experience for those needing a caffeine fix, often characterized by a bustling and occasionally noisy vibe."
+    },
+    {
+      "budget": "20",
+      "hours": "07:30-22:00",
+      "desc": "A common chain spot that provides consistent service and seating, favored by many for its convenience rather than unique culinary offerings."
+    }
+  ],
+  "Boutique Central (בוטיק סנטרל)": [
+    {
+      "budget": "20",
+      "hours": "07:00-20:00",
+      "desc": "A specialized bakery chain known for high-quality cakes and tarts, attracting a crowd that values presentation over affordability."
+    },
+    {
+      "budget": "20",
+      "hours": "08:00-19:00",
+      "desc": "This boutique-style bakery offers a refined selection of sweets in a compact space that often feels cramped during peak hours."
+    },
+    {
+      "budget": "20",
+      "hours": "09:00-21:00",
+      "desc": "A popular spot for dessert lovers that maintains a reputation for high-end ingredients, though the service can be hit-or-miss."
+    }
+  ],
+  "re:bar": [
+    {
+      "budget": "15",
+      "hours": "09:00-21:00",
+      "desc": "A health-conscious juice bar popular with the post-gym crowd, offering a quick and standardized menu of smoothies."
+    },
+    {
+      "budget": "15",
+      "hours": "10:00-22:00",
+      "desc": "This vibrant juice shop provides efficient service for those seeking refreshing drinks, though it lacks a proper seating area."
+    },
+    {
+      "budget": "15",
+      "hours": "08:00-20:00",
+      "desc": "A functional chain focused on nutritional beverages that draws a busy, health-focused clientele looking for grab-and-go options."
+    }
+  ],
+  "Burgus Burger Bar": [
+    {
+      "budget": "40",
+      "hours": "11:00-23:00",
+      "desc": "A family-friendly burger chain that delivers consistent, hearty meals in a casual, sports-bar-inspired setting."
+    },
+    {
+      "budget": "40",
+      "hours": "12:00-00:00",
+      "desc": "This burger joint is a staple for casual dining, often praised for its generous portions but criticized for long wait times on busy nights."
+    },
+    {
+      "budget": "40",
+      "hours": "11:30-22:30",
+      "desc": "A reliable destination for meat lovers that offers a standard menu in a noisy, high-energy environment suitable for groups."
+    }
+  ],
+  "Lehem Erez (לחם ארז)": [
+    {
+      "budget": "25",
+      "hours": "07:00-18:00",
+      "desc": "A long-standing bakery chain that maintains a reputation for traditional sourdough and rustic loaves, though some find it overpriced."
+    },
+    {
+      "budget": "25",
+      "hours": "08:00-19:00",
+      "desc": "This bakery offers a cozy, nostalgic atmosphere that appeals to an older demographic, serving quality breads despite aging facilities."
+    },
+    {
+      "budget": "25",
+      "hours": "07:30-17:00",
+      "desc": "A reliable brand for artisanal bread enthusiasts, though the cafe service can be slow and the menu feels somewhat dated."
+    }
+  ],
+  "Reviva and Celia": [
+    {
+      "budget": "120",
+      "hours": "08:00-23:00",
+      "desc": "An upscale, bustling café popular with affluent locals and known for high-quality pastries despite being frequently overcrowded."
+    },
+    {
+      "budget": "120",
+      "hours": "09:00-22:00",
+      "desc": "This refined spot caters to a sophisticated crowd and maintains a strong reputation for consistent, albeit pricey, bistro fare."
+    },
+    {
+      "budget": "120",
+      "hours": "07:30-23:30",
+      "desc": "A trendy destination for brunch enthusiasts that remains a staple of the local scene despite long wait times during peak hours."
+    }
+  ],
+  "Mike's Place": [
+    {
+      "budget": "90",
+      "hours": "12:00-02:00",
+      "desc": "A loud, American-style sports bar frequented by tourists and expats, known more for its lively atmosphere than its standard pub grub."
+    },
+    {
+      "budget": "90",
+      "hours": "11:00-03:00",
+      "desc": "This energetic venue serves as a reliable hub for live music and game screenings, drawing a rowdy crowd that enjoys the unpretentious vibe."
+    },
+    {
+      "budget": "90",
+      "hours": "10:00-04:00",
+      "desc": "Known for late-night revelry and a consistent stream of sports broadcasts, this bar is a go-to for those seeking a boisterous, casual environment."
+    }
+  ],
+  "לחם ארז": [
+    {
+      "budget": "70",
+      "hours": "07:00-19:00",
+      "desc": "A classic artisan bakery chain that draws a loyal neighborhood crowd, though critics note the quality can vary between different franchise locations."
+    },
+    {
+      "budget": "70",
+      "hours": "08:00-20:00",
+      "desc": "This established coffee shop remains a staple for fresh bread and simple breakfasts, appealing to families and locals seeking a quiet morning."
+    },
+    {
+      "budget": "70",
+      "hours": "07:30-18:00",
+      "desc": "Reliable for its sourdough and quick lunch options, this spot maintains a modest, utilitarian aesthetic that prioritizes function over modern decor."
+    }
+  ],
+  "Subway": [
+    {
+      "budget": "40",
+      "hours": "10:00-22:00",
+      "desc": "A predictable fast-food sandwich chain that serves a transient crowd, offering standardized meals that rarely deviate from the global brand expectation."
+    },
+    {
+      "budget": "40",
+      "hours": "09:00-23:00",
+      "desc": "This utilitarian shop provides quick, customizable lunches for commuters, though it lacks the culinary character of local independent eateries."
+    },
+    {
+      "budget": "40",
+      "hours": "11:00-00:00",
+      "desc": "A highly functional, no-frills option for late-night dining that delivers exactly what the brand promises with no surprises for the consumer."
+    }
+  ],
+  "Beer Garden": [
+    {
+      "budget": "100",
+      "hours": "17:00-00:00",
+      "desc": "A communal, open-air drinking spot that attracts a young, social crowd despite the often overpriced beer and limited food menu."
+    },
+    {
+      "budget": "100",
+      "hours": "16:00-01:00",
+      "desc": "This lively garden setting is popular for after-work gatherings, offering a festive environment that compensates for its somewhat basic culinary offerings."
+    },
+    {
+      "budget": "100",
+      "hours": "18:00-02:00",
+      "desc": "Focusing on a high-energy, beer-centric experience, this venue is a staple for groups, though critics suggest it prioritizes volume over craft quality."
+    }
+  ],
+  "Landwer's Coffee": [
+    {
+      "budget": "80",
+      "hours": "07:30-23:00",
+      "desc": "A reliable, omnipresent café chain that offers a safe, family-friendly menu, often criticized for its repetitive and somewhat uninspired culinary direction."
+    },
+    {
+      "budget": "80",
+      "hours": "08:00-22:00",
+      "desc": "This popular spot draws a broad demographic with its extensive menu, providing a consistent experience that serves as a dependable meeting point."
+    },
+    {
+      "budget": "80",
+      "hours": "07:00-23:30",
+      "desc": "A staple of the local café culture that balances efficiency with comfort, though it is frequently noted for its bustling and sometimes noisy interior."
+    }
+  ],
+  "Courcelles": [
+    {
+      "budget": "50",
+      "hours": "07:00-18:00",
+      "desc": "An authentic-leaning French bakery that attracts pastry enthusiasts with its high-quality butter goods, though seating is often limited and cramped."
+    },
+    {
+      "budget": "50",
+      "hours": "07:30-19:00",
+      "desc": "This small-scale bakery maintains a reputation for excellent baguettes and tarts, serving a discerning local crowd that values traditional methods."
+    },
+    {
+      "budget": "50",
+      "hours": "08:00-17:00",
+      "desc": "A focused, artisan-driven establishment that prioritizes quality over variety, creating a quaint atmosphere that is popular during morning hours."
+    }
+  ],
+  "צומת ספרים": [
+    {
+      "budget": "60",
+      "hours": "09:00-21:00",
+      "desc": "A large-scale bookstore chain that doubles as a communal space, though it is often criticized for the commercialization of its literary selection."
+    },
+    {
+      "budget": "60",
+      "hours": "10:00-22:00",
+      "desc": "This accessible retailer caters to a wide audience seeking mainstream titles, providing a functional, well-lit environment for browsing."
+    },
+    {
+      "budget": "60",
+      "hours": "09:30-21:30",
+      "desc": "While convenient for shoppers, this chain is often viewed as impersonal by book lovers who prefer the intimacy of smaller independent shops."
+    }
+  ],
+  "Greg Cafe": [
+    {
+      "budget": "85",
+      "hours": "07:30-23:00",
+      "desc": "A massive, predictable café chain that offers a vast, standardized menu appealing to families, despite lacking any unique or standout culinary identity."
+    },
+    {
+      "budget": "85",
+      "hours": "08:00-22:30",
+      "desc": "This ubiquitous brand provides a comfortable, neutral environment for business meetings, even if the service quality fluctuates significantly between branches."
+    },
+    {
+      "budget": "85",
+      "hours": "07:00-00:00",
+      "desc": "Serving as a reliable neighborhood staple, this cafe is known for its extensive hours rather than its cuisine, which is generally considered average."
+    }
+  ]
+}
