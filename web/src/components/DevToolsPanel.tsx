@@ -42,10 +42,10 @@ export function DevToolsPanel() {
   const defaultTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
   const [mockTimeInput, setMockTimeInput] = useState(defaultTime);
 
-  // Only show in development
-  if (import.meta.env.MODE !== 'development') {
-    return null;
-  }
+  // DevTools enabled for production demo
+  // if (import.meta.env.MODE !== 'development') {
+  //   return null;
+  // }
 
   const handleTestNotification = () => {
     showAppNotification('Test Notification', 'This is a test from DevTools!');
