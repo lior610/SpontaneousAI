@@ -13,6 +13,7 @@ class RecommendationRequest(BaseModel):
     current_location: Optional[dict] = None  # {"lat": float, "lng": float}
     current_time: Optional[datetime] = None  # Local time at the destination ideally
     context: Optional[dict] = None  # weather, time_of_day, etc.
+    category_filter: Optional[str] = None  # e.g. "food" - restricts results to this category
     
 class RecommendationFeedback(BaseModel):
     """Schema for posting feedback on a recommendation"""

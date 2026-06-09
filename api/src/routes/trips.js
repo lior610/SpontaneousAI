@@ -11,6 +11,8 @@ router.get('/:id', tripsController.getTripById);
 router.get('/:id/next-activity', tripsController.getNextActivity);
 router.post('/:id/activities/complete', tripsController.completeTripActivity);
 router.post('/:id/activities/skip', tripsController.skipTripActivity);
+router.post('/:id/food-intercept/dismiss', tripsController.dismissFoodIntercept);
+router.get('/:id/food-intercept/next', tripsController.nextFoodSuggestion);
 router.post('/', tripsController.createTrip);
 router.put('/:id', tripsController.updateTrip);
 router.delete('/:id', tripsController.deleteTrip);
