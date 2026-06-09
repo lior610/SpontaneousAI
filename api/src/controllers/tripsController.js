@@ -7,6 +7,7 @@ import * as attractionsDb from '../db/attractionsConnection.js';
 import axios from 'axios';
 import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedding.js';
 import * as locationService from '../services/locationService.js';
+import { checkFoodIntercept, dismissFoodSuggestion, getNextFoodSuggestion, refillAndGetFood, clearLlmDeclineCooldown } from '../services/foodInterceptService.js';
 import { getRecommendedStayMinutes } from '../services/recommendedStay.js';
 
 // If a visitor stays less than this fraction of the LLM-recommended duration,
@@ -903,6 +904,10 @@ export const completeTripActivity = async (req, res) => {
     // fresh batch — the user's location, time, and preferences (EMA) have changed.
     tripRecommendationsCache.delete(tripId);
 
+    // A completed activity changes the food-gate context, so let the LLM be consulted
+    // again even if it previously declined (suppressed only across plain skips).
+    clearLlmDeclineCooldown(tripId);
+
     res.status(201).json({
       message: 'Activity completion saved',
       activity_log: {
@@ -996,11 +1001,23 @@ export const getNextActivity = async (req, res) => {
     const current_lat = position ? position.lat : null;
     const current_lng = position ? position.lng : null;
 
+    // Food intercept runs before normal recs — own try/catch so failures never block the flow
+    const specificNeed = req.query.specific_need;
+    if (!specificNeed) {
+      try {
+        const foodResult = await checkFoodIntercept(tripId, trip, position);
+        if (foodResult.triggered) {
+          return res.json(foodResult.foodCard);
+        }
+      } catch (err) {
+        console.error('[FoodIntercept] Unexpected error, skipping:', err.message);
+      }
+    }
+
     const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
     const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
 
-    // Handle specific Utility Needs bypassing cache
-    const specificNeed = req.query.specific_need;
+    // Utility needs (pharmacy, grocery, etc.) bypass the recommendation cache entirely
     if (specificNeed) {
       try {
         // Resolve the correct location_id from the trip's destination
@@ -1046,7 +1063,7 @@ export const getNextActivity = async (req, res) => {
       }
     }
 
-    // Standard cached recommendation flow
+    // Serve from cached batch or fetch a new one from the engine (up to 25 at a time)
     let cached = tripRecommendationsCache.get(tripId);
     const cacheExpired = cached && (Date.now() - cached.fetchedAt > CACHE_TTL_MS);
     if (cacheExpired) {
@@ -1139,6 +1156,45 @@ export const skipTripActivity = async (req, res) => {
 
     res.json({ message: 'Activity skipped' });
   } catch(error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const dismissFoodIntercept = async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.id, 10);
+    if (isNaN(tripId) || tripId <= 0) return res.status(400).json({ error: 'Invalid trip ID' });
+
+    dismissFoodSuggestion(tripId);
+    const cooldownMs = parseInt(process.env.FOOD_COOLDOWN_MS || '3600000', 10);
+    res.json({ ok: true, cooldown_until: new Date(Date.now() + cooldownMs).toISOString() });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const nextFoodSuggestion = async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.id, 10);
+    if (isNaN(tripId) || tripId <= 0) return res.status(400).json({ error: 'Invalid trip ID' });
+
+    const position = await locationService.getPosition(tripId);
+    let foodCard = getNextFoodSuggestion(tripId, position);
+
+    // Batch exhausted — fetch a fresh one from the engine
+    if (!foodCard) {
+      const tripRow = await usersDb.query('SELECT * FROM trips WHERE trip_id = $1', [tripId]);
+      if (tripRow.rows.length > 0) {
+        foodCard = await refillAndGetFood(tripId, tripRow.rows[0], position);
+      }
+    }
+
+    if (!foodCard) {
+      return res.status(404).json({ error: 'No more food suggestions available' });
+    }
+
+    res.json(foodCard);
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };

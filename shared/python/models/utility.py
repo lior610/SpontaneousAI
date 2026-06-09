@@ -6,6 +6,6 @@ class UtilityRequest(BaseModel):
     lat: float
     lng: float
     location_id: int
-    parent_category: Literal["pharmacy", "medical", "grocery", "convenience", "police_emergency"]
+    parent_category: Literal["pharmacy", "medical", "grocery", "convenience", "police_emergency", "food"]
     limit: Optional[int] = 5
     current_hour: Optional[int] = None
