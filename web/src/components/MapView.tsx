@@ -1,6 +1,22 @@
 import { useCallback, useRef, useEffect, useState } from 'react';
 import { GoogleMap, useJsApiLoader, MarkerF, OverlayViewF, OverlayView } from '@react-google-maps/api';
 
+// Suppress noisy Google Maps warnings in the console
+const originalWarn = console.warn;
+console.warn = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes('Google Maps JavaScript API')) {
+    return;
+  }
+  originalWarn(...args);
+};
+const originalError = console.error;
+console.error = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes('Google Maps JavaScript API')) {
+    return;
+  }
+  originalError(...args);
+};
+
 interface MapViewProps {
   attractionLat: number;
   attractionLng: number;

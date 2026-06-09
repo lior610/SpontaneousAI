@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios';
+import * as notificationService from './notificationService.js';
 
 function getEngineBaseUrl() {
   const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
@@ -37,10 +38,15 @@ export async function rebuildPreferenceEmbedding(userId, tripId, options = {}) {
  * @param {number} tripId
  */
 export function schedulePreferenceEmbeddingRebuild(userId, tripId) {
-  rebuildPreferenceEmbedding(userId, tripId, { forceRebuild: true }).catch((err) => {
-    console.error(
-      `[API] Preference embedding rebuild failed for user_id=${userId} trip_id=${tripId}:`,
-      err.response?.data ?? err.message,
-    );
-  });
+  rebuildPreferenceEmbedding(userId, tripId, { forceRebuild: true })
+    .then(() => {
+      // Notify client that trip generation (embedding) is complete
+      notificationService.sendNotification(userId, 'TRIP_GENERATED', { tripId });
+    })
+    .catch((err) => {
+      console.error(
+        `[API] Preference embedding rebuild failed for user_id=${userId} trip_id=${tripId}:`,
+        err.response?.data ?? err.message,
+      );
+    });
 }

@@ -172,10 +172,18 @@ export async function fetchLocations(): Promise<{ id: string, name: string, regi
 
 export type { NextActivityResponse as NextActivityResult } from '@/types/trip';
 
+import { devToolsState } from '../components/DevToolsPanel';
+
 export async function fetchNextActivity(tripId?: number, specificNeed?: string): Promise<NextActivityResult> {
   if (!tripId) return { activity: null, userLocation: null };
-  const url = specificNeed
-    ? `${API_BASE}/api/trips/${tripId}/next-activity?specific_need=${encodeURIComponent(specificNeed)}`
+  
+  const params = new URLSearchParams();
+  if (specificNeed) params.append('specific_need', specificNeed);
+  if (devToolsState.mockTimeEnabled) params.append('mock_time', devToolsState.mockTime);
+  
+  const queryString = params.toString();
+  const url = queryString 
+    ? `${API_BASE}/api/trips/${tripId}/next-activity?${queryString}`
     : `${API_BASE}/api/trips/${tripId}/next-activity`;
 
   const res = await fetch(url);
@@ -215,7 +223,7 @@ export async function completeActivity(
       review_count: activity.reviewCount,
       feedback: options.feedback ?? null,
       arrived_at: options.arrivedAt ?? null,
-      completed_at: new Date().toISOString(),
+      completed_at: devToolsState.mockTimeEnabled ? devToolsState.mockTime : new Date().toISOString(),
       place_id: activity.id,
       lat: activity.lat,
       lng: activity.lng

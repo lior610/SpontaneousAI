@@ -11,6 +11,7 @@ import { Activity, TripSetup, defaultTripSetup, NextActivityResponse } from '@/t
 import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchCompletedActivities, CompletedActivityLog } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
 import { getCurrentPosition, startTracking, stopTracking, watchArrivalDeparture } from '@/services/locationService';
+import { showAppNotification } from '@/services/notificationService';
 
 const GPS_ENABLED = import.meta.env.VITE_GPS_ENABLED === 'on';
 
@@ -133,7 +134,7 @@ export function TripPage() {
   // Mark the current activity done and advance to the next one. The backend uses the
   // arrival timestamp (from the geofence) to measure dwell time; when no explicit
   // feedback is given it asks the LLM whether the user likely didn't enjoy it.
-  const finishActivity = async (feedback?: Activity['feedback']) => {
+  const finishActivity = async (feedback?: Activity['feedback'], notifyNext?: boolean) => {
     if (!tripId || finishingRef.current) return;
     finishingRef.current = true;
 
@@ -167,6 +168,9 @@ export function TripPage() {
     try {
       const result = await fetchNextActivity(tripId);
       applyActivityResult(result);
+      if (result.activity && notifyNext) {
+        showAppNotification('Next Destination Ready', `Head over to: ${result.activity.title}`);
+      }
     } catch (err) {
       console.error('[TripPage] Failed to fetch next activity:', err);
     } finally {
@@ -185,6 +189,7 @@ export function TripPage() {
     }
     if (result.activity && tripId) {
       sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(result.activity));
+      console.log(`[TripPage] Next Activity Generated: ${result.activity.title} at [${result.activity.lat}, ${result.activity.lng}]`);
     }
   };
 
@@ -280,7 +285,7 @@ export function TripPage() {
           setUserLocation(coords);
         },
         onDepart: () => {
-          setShowFeedback(true);
+          finishActivity(undefined, true);
         },
       }
     );
