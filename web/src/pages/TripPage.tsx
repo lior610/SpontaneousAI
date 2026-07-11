@@ -4,16 +4,19 @@ import { Settings, MapPin, RefreshCw, LogOut, Home, Briefcase } from 'lucide-rea
 import { Button } from '@/components/ui/button';
 import { ActivityCard } from '@/components/ActivityCard';
 import { FeedbackPopup, FeedbackChoice } from '@/components/FeedbackPopup';
+import { CompanionSuggestionPopup } from '@/components/CompanionSuggestionPopup';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import { MapView } from '@/components/MapView';
 import { Activity, TripSetup, defaultTripSetup, NextActivityResponse } from '@/types/trip';
-import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchCompletedActivities, CompletedActivityLog } from '@/services/tripService';
+import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchCompletedActivities, CompletedActivityLog, CompanionSuggestion } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
 import { getCurrentPosition, startTracking, stopTracking, watchArrivalDeparture } from '@/services/locationService';
 import { showAppNotification } from '@/services/notificationService';
+import { featureFlags } from '@/config/featureFlags';
 
 const GPS_ENABLED = import.meta.env.VITE_GPS_ENABLED === 'on';
+const COMPANION_ENABLED = featureFlags.companionSuggestions.enabled;
 
 const ACTIVITY_CACHE_KEY = (id: number) => `trip_${id}_current_activity`;
 const LOCATION_CACHE_KEY = (id: number) => `trip_${id}_user_location`;
@@ -48,6 +51,7 @@ export function TripPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasArrived, setHasArrived] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [companionSuggestion, setCompanionSuggestion] = useState<CompanionSuggestion | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isFoodIntercept, setIsFoodIntercept] = useState(false);
@@ -131,38 +135,9 @@ export function TripPage() {
     finishActivity(feedback);
   };
 
-  // Mark the current activity done and advance to the next one. The backend uses the
-  // arrival timestamp (from the geofence) to measure dwell time; when no explicit
-  // feedback is given it asks the LLM whether the user likely didn't enjoy it.
-  const finishActivity = async (feedback?: Activity['feedback'], notifyNext?: boolean) => {
-    if (!tripId || finishingRef.current) return;
-    finishingRef.current = true;
-
-    const arrivedAt = arrivedAtRef.current;
-
-    if (currentActivity) {
-      try {
-        await completeActivity(tripId, currentActivity, { arrivedAt, feedback });
-      } catch (err) {
-        console.error('[TripPage] Failed to complete activity:', err);
-      }
-      // Use completed attraction's coords as new user position
-      if (currentActivity.lat != null && currentActivity.lng != null) {
-        setUserLocation({ lat: currentActivity.lat, lng: currentActivity.lng });
-      }
-      // Refresh history so the resulting feedback (explicit or auto-derived) is reflected.
-      try {
-        const completed = await fetchCompletedActivities(tripId);
-        setCompletedActivities(completed.map(toActivity));
-      } catch (err) {
-        console.error('[TripPage] Failed to refresh completed activities:', err);
-      }
-    }
-
-    // Reset arrival tracking for the next attraction.
-    arrivedAtRef.current = null;
-    setHasArrived(false);
-
+  // Fetch and display the next recommended activity from the engine.
+  const advanceToNextActivity = async (notifyNext?: boolean) => {
+    if (!tripId) return;
     sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
     setIsLoading(true);
     try {
@@ -175,8 +150,72 @@ export function TripPage() {
       console.error('[TripPage] Failed to fetch next activity:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Mark the current activity done and advance to the next one. The backend uses the
+  // arrival timestamp (from the geofence) to measure dwell time; when no explicit
+  // feedback is given it asks the LLM whether the user likely didn't enjoy it.
+  //
+  // If the like matches a popular trip, the backend returns a companion suggestion;
+  // we offer it before fetching the next activity (accept -> show it, dismiss -> normal next).
+  const finishActivity = async (feedback?: Activity['feedback'], notifyNext?: boolean) => {
+    if (!tripId || finishingRef.current) return;
+    finishingRef.current = true;
+
+    try {
+      const arrivedAt = arrivedAtRef.current;
+      let suggestion: CompanionSuggestion | null = null;
+
+      if (currentActivity) {
+        try {
+          suggestion = await completeActivity(tripId, currentActivity, { arrivedAt, feedback });
+        } catch (err) {
+          console.error('[TripPage] Failed to complete activity:', err);
+        }
+        // Use completed attraction's coords as new user position
+        if (currentActivity.lat != null && currentActivity.lng != null) {
+          setUserLocation({ lat: currentActivity.lat, lng: currentActivity.lng });
+        }
+        // Refresh history so the resulting feedback (explicit or auto-derived) is reflected.
+        try {
+          const completed = await fetchCompletedActivities(tripId);
+          setCompletedActivities(completed.map(toActivity));
+        } catch (err) {
+          console.error('[TripPage] Failed to refresh completed activities:', err);
+        }
+      }
+
+      // Reset arrival tracking for the next attraction.
+      arrivedAtRef.current = null;
+      setHasArrived(false);
+
+      // Offer the companion suggestion (if any) before advancing.
+      if (COMPANION_ENABLED && suggestion?.activity) {
+        setCompanionSuggestion(suggestion);
+        return;
+      }
+
+      await advanceToNextActivity(notifyNext);
+    } finally {
       finishingRef.current = false;
     }
+  };
+
+  // User accepted the "you might also like" suggestion: show it as the next activity.
+  const handleCompanionAccept = () => {
+    const suggestion = companionSuggestion;
+    setCompanionSuggestion(null);
+    if (!suggestion?.activity || !tripId) return;
+    setIsFoodIntercept(false);
+    setCurrentActivity(suggestion.activity);
+    sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(suggestion.activity));
+  };
+
+  // User dismissed the suggestion: continue with the normal recommendation flow.
+  const handleCompanionDismiss = async () => {
+    setCompanionSuggestion(null);
+    await advanceToNextActivity();
   };
 
   // Shared state update for any "next activity" response (regular or food intercept)
@@ -469,6 +508,15 @@ export function TripPage() {
           activity={currentActivity}
           onSubmit={handleFeedbackSubmit}
           onClose={() => setShowFeedback(false)}
+        />
+      )}
+
+      {/* Companion Suggestion Popup ("because you liked X...") */}
+      {companionSuggestion && (
+        <CompanionSuggestionPopup
+          suggestion={companionSuggestion}
+          onAccept={handleCompanionAccept}
+          onDismiss={handleCompanionDismiss}
         />
       )}
 

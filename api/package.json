@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "restart": "lsof -ti:3000 | xargs kill -9 2>/dev/null; npm run dev"
+    "restart": "lsof -ti:3000 | xargs kill -9 2>/dev/null; npm run dev",
+    "test": "node --test"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

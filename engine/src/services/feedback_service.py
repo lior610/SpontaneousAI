@@ -7,7 +7,7 @@ attraction is liked.
 """
 import sys
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from pathlib import Path
 
 shared_path = str(Path(__file__).resolve().parents[3] / "shared" / "python")
@@ -17,14 +17,20 @@ if shared_path not in sys.path:
 from db.usersConnection import get_db_connection
 from src.db.feedback_queries import record_feedback
 from src.services.preference_service import PreferenceComposer
+from src.services.companion_service import CompanionSuggestionService
 
 logger = logging.getLogger(__name__)
 
 class FeedbackService:
     """Service handling runtime feedback (swipes/interactions)."""
     
-    def __init__(self, preference_composer: PreferenceComposer):
+    def __init__(
+        self,
+        preference_composer: PreferenceComposer,
+        companion_service: Optional[CompanionSuggestionService] = None,
+    ):
         self.preference_composer = preference_composer
+        self.companion_service = companion_service
 
     async def record_interaction(
         self,
@@ -57,12 +63,25 @@ class FeedbackService:
                 
             logger.info(f"Recorded feedback: User {user_id}, Trip {trip_id}, place {place_id} -> {action}")
             
+            result: Dict[str, Any] = {"status": "success", "action": action}
+
             # If the action was 'liked', apply exponential moving average to dynamic trip vector
             if action == 'liked':
                 await self.preference_composer.apply_feedback(user_id, trip_id, place_id)
                 logger.info("Real-time EMA applied for liked attraction.")
-                
-            return {"status": "success", "action": action}
+
+                # After the EMA update, check the popular-trips pool for a
+                # "because you liked X, you might also like Y" companion suggestion.
+                if self.companion_service is not None:
+                    suggestion = self.companion_service.suggest(user_id, trip_id, place_id)
+                    if suggestion is not None:
+                        result["companion_suggestion"] = suggestion
+                        logger.info(
+                            f"Companion suggestion for trip {trip_id}: "
+                            f"{suggestion.get('place_id')} (sim={suggestion.get('similarity')})"
+                        )
+
+            return result
             
         except Exception as e:
             logger.error(f"Failed to record feedback: {str(e)}")

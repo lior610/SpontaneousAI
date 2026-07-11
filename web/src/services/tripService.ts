@@ -201,11 +201,18 @@ export async function fetchNextActivity(tripId?: number, specificNeed?: string):
   };
 }
 
+/** "Because you liked X, you might also like Y" suggestion from a matched popular trip. */
+export interface CompanionSuggestion {
+  activity: Activity;
+  reason: string | null;
+  distance_km: number | null;
+}
+
 export async function completeActivity(
   tripId: number,
   activity: Activity,
   options: { arrivedAt?: string | null; feedback?: Activity['feedback'] } = {}
-): Promise<void> {
+): Promise<CompanionSuggestion | null> {
   if (!tripId || Number.isNaN(tripId)) {
     throw new Error('Missing trip id for activity completion');
   }
@@ -233,6 +240,9 @@ export async function completeActivity(
     const text = await res.text().catch(() => '');
     throw new Error(`Failed to save completed activity (${res.status}): ${text || res.statusText}`);
   }
+  const data = await res.json().catch(() => null);
+  const cs = data?.companion_suggestion;
+  return cs && cs.activity ? (cs as CompanionSuggestion) : null;
 }
 
 export async function skipActivity(tripId: number, placeId: string): Promise<void> {

@@ -9,6 +9,7 @@ import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedd
 import * as locationService from '../services/locationService.js';
 import { checkFoodIntercept, dismissFoodSuggestion, getNextFoodSuggestion, refillAndGetFood, clearLlmDeclineCooldown } from '../services/foodInterceptService.js';
 import { getRecommendedStayMinutes } from '../services/recommendedStay.js';
+import { mapEngineAttractionToActivity } from '../utils/activityMapper.js';
 
 // If a visitor stays less than this fraction of the LLM-recommended duration,
 // we infer they didn't enjoy the attraction.
@@ -873,6 +874,7 @@ export const completeTripActivity = async (req, res) => {
     const row = result.rows[0];
 
     // Engine Feedback & Coordinations update logic
+    let companionSuggestion = null;
     if (place_id) {
       const tripRow = await usersDb.query('SELECT user_id FROM trips WHERE trip_id = $1', [tripId]);
       const userId = tripRow.rows[0]?.user_id;
@@ -887,9 +889,19 @@ export const completeTripActivity = async (req, res) => {
         try {
           const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
           const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
-          await axios.post(`http://${engineHost}:8000/recommendations/feedback`, {
+          // Capture the engine response: on a 'liked' action it may include a
+          // "because you liked X, you might also like Y" companion suggestion.
+          const feedbackRes = await axios.post(`http://${engineHost}:8000/recommendations/feedback`, {
             user_id: userId, trip_id: tripId, place_id, action
           });
+          const cs = feedbackRes.data?.companion_suggestion;
+          if (cs && cs.place_id) {
+            companionSuggestion = {
+              activity: mapEngineAttractionToActivity(cs),
+              reason: cs.reason || null,
+              distance_km: cs.distance_km ?? null,
+            };
+          }
         } catch (err) {
           console.error("Engine feedback forward err:", err.message);
         }
@@ -929,6 +941,7 @@ export const completeTripActivity = async (req, res) => {
         completed_at: row.completed_at,
         created_at: row.created_at,
       },
+      companion_suggestion: companionSuggestion,
     });
   } catch (error) {
     console.error('Error saving completed activity:', error);
@@ -1105,21 +1118,7 @@ export const getNextActivity = async (req, res) => {
     const cacheAgeSeconds = Math.round((Date.now() - cached.fetchedAt) / 1000);
 
     res.json({
-      activity: {
-        id: attr.place_id || attr.activity_id,
-        title: attr.name,
-        description: attr.description,
-        image: '',
-        rating: null,
-        reviewCount: null,
-        estimatedTime: attr.hours || '1-2 hours',
-        cost: attr.budget && attr.budget !== '0' ? `$${attr.budget}` : 'Free',
-        category: attr.categories && attr.categories.length > 0 ? attr.categories[0].toLowerCase() : 'general',
-        address: attr.address,
-        lat: attr.latitude,
-        lng: attr.longitude,
-        completed: false
-      },
+      activity: mapEngineAttractionToActivity(attr),
       userLocation: position ? { lat: current_lat, lng: current_lng } : null,
       _debug: {
         source: freshBatch || cacheExpired ? 'fresh_batch' : 'cached_batch',

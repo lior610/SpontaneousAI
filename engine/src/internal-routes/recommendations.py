@@ -15,6 +15,7 @@ from src.services.preference_service import PreferenceComposer
 from src.services.cluster_retrieval import ClusterRetrievalService
 from src.services.ranking_service import RankingEngine
 from src.services.feedback_service import FeedbackService
+from src.services.companion_service import CompanionSuggestionService
 from db.attractionsConnection import get_db_connection as get_attr_conn
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,11 @@ router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 preference_composer = PreferenceComposer()
 cluster_retrieval = ClusterRetrievalService(top_per_cluster=5, max_clusters=10)
 ranking_engine = RankingEngine()
-feedback_service = FeedbackService(preference_composer=preference_composer)
+companion_service = CompanionSuggestionService()
+feedback_service = FeedbackService(
+    preference_composer=preference_composer,
+    companion_service=companion_service,
+)
 
 @router.post("/", response_model=List[RecommendationResponse])
 async def get_recommendations(req: RecommendationRequest):
