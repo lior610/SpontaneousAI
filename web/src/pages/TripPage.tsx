@@ -305,12 +305,12 @@ export function TripPage() {
       <header className="sticky top-0 z-20 bg-card/80 backdrop-blur-md border-b">
         <div className="px-4 py-3">
           <div className="flex items-center justify-between mb-2">
-            <div>
+            <div className="min-w-0 mr-4">
               <h1 className="font-bold text-lg flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-primary" />
-                {tripSetup.destination || 'Your Trip'}
+                <MapPin className="w-5 h-5 text-primary flex-shrink-0" />
+                <span className="truncate">{tripSetup.destination || 'Your Trip'}</span>
               </h1>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground truncate">
                 {completedActivities.length} activities completed
               </p>
             </div>

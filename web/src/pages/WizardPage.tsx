@@ -241,7 +241,7 @@ export default function WizardPage() {
                   value={localDestination}
                   onChange={(e) => setLocalDestination(e.target.value)}
                   disabled={isLoadingLocations}
-                  className="flex h-12 w-full rounded-xl border-2 border-input bg-card px-4 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:border-primary transition-all duration-200"
+                  className="block h-12 w-full rounded-xl border-2 border-input bg-card px-4 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:border-primary transition-all duration-200"
                 >
                   <option value="" disabled>Select a destination</option>
                   {locations.map(loc => (
@@ -269,7 +269,7 @@ export default function WizardPage() {
                     type="date"
                     value={tripSetup.startDate ? format(tripSetup.startDate, 'yyyy-MM-dd') : ''}
                     onChange={(e) => handleDateChange('startDate', e.target.value)}
-                    className="flex h-12 w-full rounded-xl border-2 border-input bg-card px-4 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:border-primary transition-all duration-200"
+                    className="block h-12 w-full rounded-xl border-2 border-input bg-card px-4 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:border-primary transition-all duration-200"
                   />
                 </div>
                 <div className="flex-1">
@@ -279,7 +279,7 @@ export default function WizardPage() {
                     type="date"
                     value={tripSetup.endDate ? format(tripSetup.endDate, 'yyyy-MM-dd') : ''}
                     onChange={(e) => handleDateChange('endDate', e.target.value)}
-                    className="flex h-12 w-full rounded-xl border-2 border-input bg-card px-4 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:border-primary transition-all duration-200"
+                    className="block h-12 w-full rounded-xl border-2 border-input bg-card px-4 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:border-primary transition-all duration-200"
                   />
                 </div>
               </div>

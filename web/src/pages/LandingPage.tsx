@@ -121,16 +121,19 @@ export function LandingPage() {
 
         {/* Header */}
         <header className="relative z-10 flex items-center justify-between p-4 md:p-6 lg:px-12">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-gradient-hero flex items-center justify-center">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-hero flex items-center justify-center flex-shrink-0">
               <Compass className="w-6 h-6 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold text-gradient-hero">Spontaneous AI</span>
+            <span className="text-xl font-bold text-gradient-hero hidden sm:inline">Spontaneous AI</span>
           </div>
           <div className="flex items-center gap-2">
             {currentUser && (
               <Button variant="glass" size="sm" asChild>
-                <Link to="/trips">Manage Trips</Link>
+                <Link to="/trips">
+                  <span className="hidden sm:inline">Manage Trips</span>
+                  <span className="sm:hidden">Trips</span>
+                </Link>
               </Button>
             )}
             {!currentUser ? (
@@ -145,11 +148,13 @@ export function LandingPage() {
                     size="sm"
                     onClick={() => navigate('/trip', { state: { tripSetup: activeTrip.tripSetup, tripId: activeTrip.tripId } })}
                   >
-                    Continue Trip
+                    <span className="hidden sm:inline">Continue Trip</span>
+                    <span className="sm:hidden">Continue</span>
                   </Button>
                 )}
                 <Button variant="default" size="sm" onClick={handleStartTrip}>
-                  New Trip
+                  <span className="hidden sm:inline">New Trip</span>
+                  <span className="sm:hidden">New</span>
                 </Button>
               </div>
             )}
