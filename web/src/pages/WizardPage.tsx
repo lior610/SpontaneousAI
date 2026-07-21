@@ -262,24 +262,24 @@ export default function WizardPage() {
                 </h3>
               </div>
               <div className="p-5 pt-0 flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <label className="text-sm text-muted-foreground mb-1 block">Start Date</label>
                   <input
                     ref={startDateRef}
                     type="date"
                     value={tripSetup.startDate ? format(tripSetup.startDate, 'yyyy-MM-dd') : ''}
                     onChange={(e) => handleDateChange('startDate', e.target.value)}
-                    className="block h-12 w-full rounded-xl border-2 border-input bg-card px-4 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:border-primary transition-all duration-200"
+                    className="block h-12 w-full max-w-full min-w-0 appearance-none rounded-xl border-2 border-input bg-card px-4 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:border-primary transition-all duration-200 [&::-webkit-date-and-time-value]:text-left [&::-webkit-date-and-time-value]:min-h-[1.5em]"
                   />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <label className="text-sm text-muted-foreground mb-1 block">End Date</label>
                   <input
                     ref={endDateRef}
                     type="date"
                     value={tripSetup.endDate ? format(tripSetup.endDate, 'yyyy-MM-dd') : ''}
                     onChange={(e) => handleDateChange('endDate', e.target.value)}
-                    className="block h-12 w-full rounded-xl border-2 border-input bg-card px-4 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:border-primary transition-all duration-200"
+                    className="block h-12 w-full max-w-full min-w-0 appearance-none rounded-xl border-2 border-input bg-card px-4 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:border-primary transition-all duration-200 [&::-webkit-date-and-time-value]:text-left [&::-webkit-date-and-time-value]:min-h-[1.5em]"
                   />
                 </div>
               </div>

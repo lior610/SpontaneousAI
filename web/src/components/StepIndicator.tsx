@@ -33,7 +33,7 @@ export function StepIndicator({ currentStep, totalSteps, labels }: StepIndicator
               {step < currentStep ? <Check className="w-4 h-4" /> : step}
             </div>
             <span
-              className={`mt-2 text-xs font-medium transition-colors duration-300 ${
+              className={`mt-2 text-[10px] sm:text-xs font-medium transition-colors duration-300 truncate max-w-[65px] sm:max-w-none text-center ${
                 step === currentStep
                   ? 'text-primary'
                   : step < currentStep

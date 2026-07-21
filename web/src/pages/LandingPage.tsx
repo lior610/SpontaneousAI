@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { startOfDay } from 'date-fns';
 import { Sparkles, MapPin, Clock, Compass, ArrowRight, CheckCircle2, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import heroMap from '@/assets/hero-map.png';
@@ -59,21 +60,25 @@ export function LandingPage() {
           }>;
         };
         const trips = Array.isArray(data.trips) ? data.trips : [];
-        const today = new Date();
+        const today = startOfDay(new Date());
         const active = trips.find((trip) => {
-          const start = new Date(String(trip.start_date).slice(0, 10));
-          const end = new Date(String(trip.end_date).slice(0, 10));
-          return start <= today && end >= today;
+          const startStr = String(trip.start_date).slice(0, 10);
+          const endStr = String(trip.end_date).slice(0, 10);
+          const start = startOfDay(new Date(`${startStr}T00:00:00`));
+          const end = startOfDay(new Date(`${endStr}T00:00:00`));
+          return start <= today && today <= end;
         });
         if (!active) {
           setActiveTrip(null);
           return;
         }
+        const activeStartStr = String(active.start_date).slice(0, 10);
+        const activeEndStr = String(active.end_date).slice(0, 10);
         setActiveTrip({
           tripId: active.trip_id,
           tripSetup: {
-            startDate: new Date(String(active.start_date).slice(0, 10)),
-            endDate: new Date(String(active.end_date).slice(0, 10)),
+            startDate: new Date(`${activeStartStr}T00:00:00`),
+            endDate: new Date(`${activeEndStr}T00:00:00`),
             destination: active.destination,
             preferences: {
               ...defaultTripSetup.preferences,

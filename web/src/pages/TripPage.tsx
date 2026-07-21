@@ -10,10 +10,10 @@ import { MapView } from '@/components/MapView';
 import { Activity, TripSetup, defaultTripSetup, NextActivityResponse } from '@/types/trip';
 import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchCompletedActivities, CompletedActivityLog } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
-import { getCurrentPosition, startTracking, stopTracking, watchArrivalDeparture } from '@/services/locationService';
+import { getCurrentPosition, reportPosition, startTracking, stopTracking, watchArrivalDeparture } from '@/services/locationService';
 import { showAppNotification } from '@/services/notificationService';
 
-const GPS_ENABLED = import.meta.env.VITE_GPS_ENABLED === 'on';
+
 
 const ACTIVITY_CACHE_KEY = (id: number) => `trip_${id}_current_activity`;
 const LOCATION_CACHE_KEY = (id: number) => `trip_${id}_user_location`;
@@ -58,7 +58,6 @@ export function TripPage() {
 
   // Fetch browser GPS once on load
   useEffect(() => {
-    if (import.meta.env.VITE_GPS_ENABLED !== 'on') return;
     getCurrentPosition().then((coords) => {
       if (coords) setUserLocation(coords);
     });
@@ -87,6 +86,16 @@ export function TripPage() {
             setUserLocation(prev => prev ?? JSON.parse(cachedLocation));
           }
         } else {
+          if (navigator.geolocation) {
+            const coords = await getCurrentPosition();
+            if (coords) {
+              await reportPosition(tripId, coords).catch(e =>
+                console.error('[TripPage] Failed to report initial load position:', e)
+              );
+              setUserLocation(coords);
+              sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(coords));
+            }
+          }
           const result = await fetchNextActivity(tripId);
           activity = result.activity;
           setIsFoodIntercept(result.card_type === 'food_intercept');
@@ -141,15 +150,25 @@ export function TripPage() {
     const arrivedAt = arrivedAtRef.current;
 
     if (currentActivity) {
+      const finalLat = userLocation?.lat ?? currentActivity.lat;
+      const finalLng = userLocation?.lng ?? currentActivity.lng;
+
       try {
-        await completeActivity(tripId, currentActivity, { arrivedAt, feedback });
+        await completeActivity(
+          tripId,
+          { ...currentActivity, lat: finalLat, lng: finalLng },
+          { arrivedAt, feedback }
+        );
       } catch (err) {
         console.error('[TripPage] Failed to complete activity:', err);
       }
-      // Use completed attraction's coords as new user position
-      if (currentActivity.lat != null && currentActivity.lng != null) {
-        setUserLocation({ lat: currentActivity.lat, lng: currentActivity.lng });
+
+      if (finalLat != null && finalLng != null) {
+        const newLoc = { lat: finalLat, lng: finalLng };
+        setUserLocation(newLoc);
+        sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(newLoc));
       }
+
       // Refresh history so the resulting feedback (explicit or auto-derived) is reflected.
       try {
         const completed = await fetchCompletedActivities(tripId);
@@ -198,6 +217,12 @@ export function TripPage() {
     if (!tripId) return;
     setIsLoading(true);
     try {
+      if (userLocation) {
+        await reportPosition(tripId, userLocation).catch(e =>
+          console.error('[TripPage] Failed to report refresh food position:', e)
+        );
+        sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(userLocation));
+      }
       const result = await fetchNextFoodSuggestion(tripId);
       if (result.activity) {
         applyActivityResult(result);
@@ -216,6 +241,12 @@ export function TripPage() {
     if (!tripId) return;
     setIsLoading(true);
     try {
+      if (userLocation) {
+        await reportPosition(tripId, userLocation).catch(e =>
+          console.error('[TripPage] Failed to report refill food position:', e)
+        );
+        sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(userLocation));
+      }
       const result = await fetchNextFoodSuggestion(tripId);
       if (result.activity) {
         setFoodBatchExhausted(false);
@@ -234,6 +265,12 @@ export function TripPage() {
     setIsLoading(true);
     setFoodBatchExhausted(false);
     try {
+      if (userLocation) {
+        await reportPosition(tripId, userLocation).catch(e =>
+          console.error('[TripPage] Failed to report return food position:', e)
+        );
+        sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(userLocation));
+      }
       sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
       const result = await fetchNextActivity(tripId);
       applyActivityResult(result);
@@ -249,6 +286,12 @@ export function TripPage() {
     if (!tripId || !currentActivity) return;
     setIsLoading(true);
     try {
+      if (userLocation) {
+        await reportPosition(tripId, userLocation).catch(e =>
+          console.error('[TripPage] Failed to report skip position:', e)
+        );
+        sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(userLocation));
+      }
       if (isFoodIntercept) {
         await dismissFoodIntercept(tripId);
       } else {
@@ -269,7 +312,7 @@ export function TripPage() {
   // Geofence: detect arrival/departure at the current attraction to measure dwell time.
   // On arrival we record the timestamp; on departure we prompt the feedback popup.
   useEffect(() => {
-    if (!GPS_ENABLED || !currentActivity || currentActivity.lat == null || currentActivity.lng == null) {
+    if (!currentActivity || currentActivity.lat == null || currentActivity.lng == null) {
       return;
     }
     arrivedAtRef.current = null;
@@ -403,7 +446,7 @@ export function TripPage() {
                 )}
                 <span>Activity #{completedActivities.length + 1}</span>
               </div>
-              {GPS_ENABLED && hasArrived && (
+              {hasArrived && (
                 <div className="flex items-center gap-2 text-sm rounded-lg px-3 py-2 border bg-secondary/10 text-secondary border-secondary/20">
                   <MapPin className="w-4 h-4" />
                   You've arrived — we'll ask how it went when you leave.
