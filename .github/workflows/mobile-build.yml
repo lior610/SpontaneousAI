@@ -2,6 +2,11 @@ name: Build Mobile App Artifacts (Android & iOS)
 
 on:
   workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'Backend API Server URL (e.g., https://your-api-domain.com)'
+        required: false
+        default: ''
 
 jobs:
   build-android:
@@ -30,6 +35,8 @@ jobs:
           npm ci || npm install
 
       - name: Build Web Application
+        env:
+          VITE_API_URL: ${{ github.event.inputs.api_url }}
         run: |
           cd web
           npm run build
@@ -72,6 +79,8 @@ jobs:
           npm ci || npm install
 
       - name: Build Web Application
+        env:
+          VITE_API_URL: ${{ github.event.inputs.api_url }}
         run: |
           cd web
           npm run build
