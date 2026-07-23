@@ -72,9 +72,10 @@ Mobile builds are compiled manually via GitHub Actions to produce ready-to-insta
 2. Open **Xcode** -> Open Developer Tool -> **Simulator**.
 3. Drag and drop `App.app` directly onto the iOS Simulator window.
 
-#### Option B: Installing on physical iPhone via Xcode CLI (`xcrun devicectl`) (Mac)
-Connect your iPhone to your Mac via USB and run:
+#### Option B: Installing on physical iPhone via Helper Script (Mac)
+Connect your iPhone to your Mac via USB, download `SpontaneousAI-iOS-IPA.zip` from GitHub Actions, unzip `SpontaneousAI.ipa`, and run:
 ```bash
-xcrun devicectl device install app --device "Your iPhone Name" /path/to/your/App.ipa
+chmod +x ./scripts/install-ios-ipa.sh
+./scripts/install-ios-ipa.sh /path/to/SpontaneousAI.ipa
 ```
 
