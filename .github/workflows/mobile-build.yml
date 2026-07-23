@@ -1,0 +1,99 @@
+name: Build Mobile App Artifacts (Android & iOS)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Install Web Dependencies
+        run: |
+          cd web
+          npm ci || npm install
+
+      - name: Build Web Application
+        run: |
+          cd web
+          npm run build
+
+      - name: Capacitor Sync
+        run: |
+          cd web
+          npx cap sync android
+
+      - name: Build Android Debug APK
+        run: |
+          cd web/android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload Android APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpontaneousAI-Android-APK
+          path: web/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+  build-ios:
+    name: Build iOS Application
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Web Dependencies
+        run: |
+          cd web
+          npm ci || npm install
+
+      - name: Build Web Application
+        run: |
+          cd web
+          npm run build
+
+      - name: Capacitor Sync
+        run: |
+          cd web
+          npx cap sync ios
+
+      - name: Build iOS Simulator App Bundle
+        run: |
+          cd web/ios/App
+          xcodebuild -workspace App.xcworkspace -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build DERIVED_DATA_PATH=build
+
+      - name: Zip iOS App Bundle
+        run: |
+          cd web/ios/App/build/Build/Products/Debug-iphonesimulator
+          zip -r SpontaneousAI-iOS-App.zip App.app
+
+      - name: Upload iOS App Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpontaneousAI-iOS-App
+          path: web/ios/App/build/Build/Products/Debug-iphonesimulator/SpontaneousAI-iOS-App.zip
+          if-no-files-found: error
