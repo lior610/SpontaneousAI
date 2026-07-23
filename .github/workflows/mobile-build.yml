@@ -84,22 +84,16 @@ jobs:
           cd web
           npx cap sync ios
 
-      - name: Build iOS Simulator App Bundle
+      - name: Build & Package iOS Simulator App Bundle
         run: |
           cd web/ios/App
-          xcodebuild -project App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build DERIVED_DATA_PATH=DerivedData
-
-      - name: Zip iOS App Bundle
-        run: |
-          APP_PATH=$(find web/ios/App -name "*.app" -type d | head -n 1)
-          APP_DIR=$(dirname "$APP_PATH")
-          APP_NAME=$(basename "$APP_PATH")
-          cd "$APP_DIR"
-          zip -r SpontaneousAI-iOS-App.zip "$APP_NAME"
+          xcodebuild -project App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build DERIVED_DATA_PATH=build
+          cd build/Build/Products/Debug-iphonesimulator
+          zip -r SpontaneousAI-iOS-App.zip *.app
 
       - name: Upload iOS App Artifact
         uses: actions/upload-artifact@v4
         with:
           name: SpontaneousAI-iOS-App
-          path: web/ios/App/**/SpontaneousAI-iOS-App.zip
+          path: web/ios/App/build/Build/Products/Debug-iphonesimulator/SpontaneousAI-iOS-App.zip
           if-no-files-found: error
