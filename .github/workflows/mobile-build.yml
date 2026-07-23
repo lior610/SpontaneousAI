@@ -2,9 +2,6 @@ name: Build Mobile App Artifacts (Android & iOS)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - native-app-develop
 
 jobs:
   build-android:
