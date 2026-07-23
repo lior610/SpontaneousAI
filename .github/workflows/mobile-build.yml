@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       api_url:
-        description: 'Backend API Server URL (e.g., https://your-api-domain.com)'
+        description: 'Backend API Server URL (e.g., https://spontai.cs.colman.ac.il)'
         required: false
-        default: ''
+        default: 'https://spontai.cs.colman.ac.il'
 
 jobs:
   build-android:
