@@ -87,16 +87,18 @@ jobs:
       - name: Build iOS Simulator App Bundle
         run: |
           cd web/ios/App
-          xcodebuild -project App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build DERIVED_DATA_PATH=build
+          xcodebuild -project App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build DERIVED_DATA_PATH=DerivedData
 
       - name: Zip iOS App Bundle
         run: |
-          cd web/ios/App/build/Build/Products/Debug-iphonesimulator
+          APP_PATH=$(find web/ios/App -name "App.app" -type d | head -n 1)
+          APP_DIR=$(dirname "$APP_PATH")
+          cd "$APP_DIR"
           zip -r SpontaneousAI-iOS-App.zip App.app
 
       - name: Upload iOS App Artifact
         uses: actions/upload-artifact@v4
         with:
           name: SpontaneousAI-iOS-App
-          path: web/ios/App/build/Build/Products/Debug-iphonesimulator/SpontaneousAI-iOS-App.zip
+          path: web/ios/App/**/SpontaneousAI-iOS-App.zip
           if-no-files-found: error
