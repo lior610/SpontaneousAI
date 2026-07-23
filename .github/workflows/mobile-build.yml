@@ -84,14 +84,18 @@ jobs:
           cd web
           npx cap sync ios
 
-      - name: Build iOS Simulator App Bundle
+      - name: Build & Package iOS Unsigned IPA
         run: |
           cd web/ios/App
-          xcodebuild -project App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -derivedDataPath build
+          xcodebuild -project App.xcodeproj -scheme App -sdk iphoneos -configuration Debug CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -derivedDataPath build
+          cd build/Build/Products/Debug-iphoneos
+          mkdir Payload
+          cp -r App.app Payload/
+          zip -r SpontaneousAI.ipa Payload
 
       - name: Upload iOS App Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SpontaneousAI-iOS-App
-          path: web/ios/App/build/Build/Products/Debug-iphonesimulator/App.app
+          name: SpontaneousAI-iOS-IPA
+          path: web/ios/App/build/Build/Products/Debug-iphoneos/SpontaneousAI.ipa
           if-no-files-found: error
