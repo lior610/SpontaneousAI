@@ -135,7 +135,6 @@ export function TripPage() {
     setShowFeedback(false);
     let feedback: Activity['feedback'] | undefined;
     if (choice === 'liked') feedback = { liked: true };
-    else if (choice === 'skipped') feedback = { liked: false };
     else feedback = undefined;
     finishActivity(feedback);
   };
