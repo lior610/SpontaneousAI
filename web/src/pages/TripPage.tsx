@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Settings, MapPin, RefreshCw, LogOut, Home, Briefcase } from 'lucide-react';
+import { Settings, MapPin, RefreshCw, LogOut, Home, Briefcase, Pill, HeartPulse, ShoppingCart, Store, ShieldAlert, Utensils } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ActivityCard } from '@/components/ActivityCard';
 import { FeedbackPopup, FeedbackChoice } from '@/components/FeedbackPopup';
@@ -12,11 +12,21 @@ import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept
 import { clearCurrentUser } from '@/services/authService';
 import { getCurrentPosition, reportPosition, startTracking, stopTracking, watchArrivalDeparture } from '@/services/locationService';
 import { showAppNotification } from '@/services/notificationService';
+import { featureFlags } from '@/config/featureFlags';
 
 
 
 const ACTIVITY_CACHE_KEY = (id: number) => `trip_${id}_current_activity`;
 const LOCATION_CACHE_KEY = (id: number) => `trip_${id}_user_location`;
+
+const SPECIFIC_NEEDS = [
+  { key: 'food', icon: Utensils, label: 'Food Break' },
+  { key: 'pharmacy', icon: Pill, label: 'Pharmacy' },
+  { key: 'medical', icon: HeartPulse, label: 'Medical' },
+  { key: 'grocery', icon: ShoppingCart, label: 'Grocery' },
+  { key: 'convenience', icon: Store, label: 'Convenience' },
+  { key: 'police_emergency', icon: ShieldAlert, label: 'Police Emergency' },
+] as const;
 
 function toActivity(c: CompletedActivityLog): Activity {
   return {
@@ -52,6 +62,7 @@ export function TripPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isFoodIntercept, setIsFoodIntercept] = useState(false);
   const [foodBatchExhausted, setFoodBatchExhausted] = useState(false);
+  const [showNeeds, setShowNeeds] = useState(false);
   const initialLoadDone = useRef(false);
   // ISO timestamp of when the geofence detected the user arrived at the current attraction.
   const arrivedAtRef = useRef<string | null>(null);
@@ -309,6 +320,27 @@ export function TripPage() {
     }
   };
 
+  const handleSpecificNeed = async (need: string) => {
+    if (!tripId) return;
+    setShowNeeds(false);
+    setIsLoading(true);
+    try {
+      if (userLocation) {
+        await reportPosition(tripId, userLocation).catch(e =>
+          console.error('[TripPage] Failed to report specific-need position:', e)
+        );
+        sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(userLocation));
+      }
+      sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
+      const result = await fetchNextActivity(tripId, need);
+      applyActivityResult(result);
+    } catch (e) {
+      console.error('[TripPage] Failed to fetch specific need:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Geofence: detect arrival/departure at the current attraction to measure dwell time.
   // On arrival we record the timestamp; on departure we prompt the feedback popup.
   useEffect(() => {
@@ -472,6 +504,16 @@ export function TripPage() {
                   <RefreshCw className="w-4 h-4" />
                   {isFoodIntercept ? 'Not hungry? Skip food break' : 'Not feeling it? Get another suggestion'}
                 </button>
+
+                {featureFlags.feedbackPopup.showSpecificNeeds && (
+                  <button
+                    onClick={() => setShowNeeds(true)}
+                    className="inline-flex items-center gap-2 h-9 px-4 rounded-md text-sm font-semibold text-foreground hover:bg-muted transition-all duration-300"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    I need something specific right now
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -513,6 +555,39 @@ export function TripPage() {
           onSubmit={handleFeedbackSubmit}
           onClose={() => setShowFeedback(false)}
         />
+      )}
+
+      {/* Specific Needs Popup */}
+      {showNeeds && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-foreground/45 backdrop-blur-sm animate-fade-in"
+          onClick={() => setShowNeeds(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border bg-card shadow-2xl animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6">
+              <h3 className="text-lg font-bold">What do you need right now?</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                We'll point you to the nearest option.
+              </p>
+
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                {SPECIFIC_NEEDS.map(({ key, icon: Icon, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => handleSpecificNeed(key)}
+                    className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-border hover:border-accent hover:bg-accent/10 transition-all duration-200"
+                  >
+                    <Icon className="w-6 h-6 text-accent" />
+                    <span className="font-medium text-sm">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {showLogoutConfirm && (
