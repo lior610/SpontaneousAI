@@ -1021,8 +1021,24 @@ export const getNextActivity = async (req, res) => {
     const mockTimeStr = req.query.mock_time;
     const currentTimeObj = mockTimeStr ? new Date(mockTimeStr) : new Date();
 
+    // An explicit "food" need enters full food-break mode: this reuses the food
+    // intercept batch/cache so the served card is a food_intercept card and the
+    // frontend's "suggest a different restaurant" / dismiss flow works exactly as it
+    // does for an auto-triggered food break — not a one-off utility card.
+    if (specificNeed === 'food') {
+      try {
+        const foodCard = await refillAndGetFood(tripId, trip, position);
+        if (foodCard) {
+          return res.json(foodCard);
+        }
+      } catch (err) {
+        console.error('[FoodIntercept] Manual food request failed:', err.message);
+      }
+      // No food found — fall through to normal recommendations rather than erroring.
+    }
+
     // Utility needs (pharmacy, grocery, etc.) bypass the recommendation cache entirely
-    if (specificNeed) {
+    if (specificNeed && specificNeed !== 'food') {
       try {
         // Resolve the correct location_id from the trip's destination
         const locationResult = await attractionsDb.pool.query(
