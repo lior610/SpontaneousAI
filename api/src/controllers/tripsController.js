@@ -202,9 +202,28 @@ export const createTrip = async (req, res) => {
         error: 'Invalid date format. Use YYYY-MM-DD or ISO 8601 format'
       });
     }
+    if (normalizeDateStr(start_date) < new Date().toISOString().split('T')[0]) {
+      return res.status(400).json({
+        error: 'start_date cannot be in the past'
+      });
+    }
     if (end < start) {
       return res.status(400).json({
         error: 'end_date must be greater than or equal to start_date'
+      });
+    }
+
+    const placesCheck = await attractionsDb.pool.query(
+      `SELECT a.place_id
+       FROM locations l
+       JOIN attractions a ON a.location_id = l.id
+       WHERE LOWER(l.name) = LOWER($1)
+       LIMIT 1`,
+      [destination]
+    );
+    if (placesCheck.rows.length === 0) {
+      return res.status(400).json({
+        error: `No places to travel found for destination '${destination}'. Please choose a different destination.`
       });
     }
 
@@ -391,6 +410,11 @@ export const updateTrip = async (req, res) => {
       if (isNaN(start.getTime())) {
         return res.status(400).json({
           error: 'Invalid start_date format. Use YYYY-MM-DD or ISO 8601 format'
+        });
+      }
+      if (normalizeDateStr(start_date) < new Date().toISOString().split('T')[0]) {
+        return res.status(400).json({
+          error: 'start_date cannot be in the past'
         });
       }
       updates.push(`start_date = $${paramIndex}`);
