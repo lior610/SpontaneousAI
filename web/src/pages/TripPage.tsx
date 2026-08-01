@@ -5,11 +5,12 @@ import { Button } from '@/components/ui/button';
 import { ActivityCard } from '@/components/ActivityCard';
 import { FeedbackPopup, FeedbackChoice } from '@/components/FeedbackPopup';
 import { CompanionSuggestionPopup } from '@/components/CompanionSuggestionPopup';
+import { WalkFurtherPrompt } from '@/components/WalkFurtherPrompt';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import { MapView } from '@/components/MapView';
 import { Activity, TripSetup, defaultTripSetup, NextActivityResponse } from '@/types/trip';
-import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchCompletedActivities, CompletedActivityLog, CompanionSuggestion } from '@/services/tripService';
+import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchCompletedActivities, CompletedActivityLog, CompanionSuggestion, expandWalkingRange } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
 import { getCurrentPosition, startTracking, stopTracking, watchArrivalDeparture } from '@/services/locationService';
 import { showAppNotification } from '@/services/notificationService';
@@ -17,6 +18,8 @@ import { featureFlags } from '@/config/featureFlags';
 
 const GPS_ENABLED = import.meta.env.VITE_GPS_ENABLED === 'on';
 const COMPANION_ENABLED = featureFlags.companionSuggestions.enabled;
+const WALK_FURTHER_ENABLED = featureFlags.walkFurther.enabled;
+const WALK_FURTHER_STEP_KM = featureFlags.walkFurther.stepKm;
 
 const ACTIVITY_CACHE_KEY = (id: number) => `trip_${id}_current_activity`;
 const LOCATION_CACHE_KEY = (id: number) => `trip_${id}_user_location`;
@@ -56,6 +59,11 @@ export function TripPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isFoodIntercept, setIsFoodIntercept] = useState(false);
   const [foodBatchExhausted, setFoodBatchExhausted] = useState(false);
+  // Set when the engine has nothing left within the current walking radius.
+  const [rangePrompt, setRangePrompt] = useState<{ maxWalkingDistance: number | null } | null>(null);
+  const [isExpandingRange, setIsExpandingRange] = useState(false);
+  // Set only when the user explicitly chooses to finish (or we can't widen further).
+  const [tripFinished, setTripFinished] = useState(false);
   const initialLoadDone = useRef(false);
   // ISO timestamp of when the geofence detected the user arrived at the current attraction.
   const arrivedAtRef = useRef<string | null>(null);
@@ -142,6 +150,16 @@ export function TripPage() {
     setIsLoading(true);
     try {
       const result = await fetchNextActivity(tripId);
+
+      // Nothing within the current radius: offer to walk further instead of
+      // declaring the trip finished.
+      if (!result.activity && result.outOfRange && WALK_FURTHER_ENABLED && !tripFinished) {
+        setRangePrompt({ maxWalkingDistance: result.maxWalkingDistance ?? null });
+        setCurrentActivity(null);
+        return;
+      }
+
+      setRangePrompt(null);
       applyActivityResult(result);
       if (result.activity && notifyNext) {
         showAppNotification('Next Destination Ready', `Head over to: ${result.activity.title}`);
@@ -151,6 +169,34 @@ export function TripPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // User agreed to walk further: widen the radius (persisted to the DB) and retry.
+  const handleWalkFurther = async () => {
+    if (!tripId) return;
+    setIsExpandingRange(true);
+    try {
+      const res = await expandWalkingRange(tripId, WALK_FURTHER_STEP_KM);
+      setRangePrompt(null);
+      if (!res.changed) {
+        // Already at the maximum radius — treat as a genuine finish.
+        setTripFinished(true);
+        setCurrentActivity(null);
+        return;
+      }
+      await advanceToNextActivity();
+    } catch (err) {
+      console.error('[TripPage] Failed to expand walking range:', err);
+    } finally {
+      setIsExpandingRange(false);
+    }
+  };
+
+  // User declined to walk further: show the normal trip-complete summary.
+  const handleFinishTrip = () => {
+    setRangePrompt(null);
+    setTripFinished(true);
+    setCurrentActivity(null);
   };
 
   // Mark the current activity done and advance to the next one. The backend uses the
@@ -471,6 +517,14 @@ export function TripPage() {
               </div>
             </div>
           </div>
+        ) : rangePrompt && !tripFinished ? (
+          <WalkFurtherPrompt
+            maxWalkingDistance={rangePrompt.maxWalkingDistance}
+            stepKm={WALK_FURTHER_STEP_KM}
+            isExpanding={isExpandingRange}
+            onExpand={handleWalkFurther}
+            onFinish={handleFinishTrip}
+          />
         ) : (
           <div className="max-w-lg mx-auto space-y-6">
             <EmptyState

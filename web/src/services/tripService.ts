@@ -198,6 +198,34 @@ export async function fetchNextActivity(tripId?: number, specificNeed?: string):
     userLocation: data.userLocation || null,
     card_type: data.card_type,
     intercept_metadata: data.intercept_metadata,
+    outOfRange: data.out_of_range || false,
+    maxWalkingDistance: data.max_walking_distance ?? null,
+  };
+}
+
+/**
+ * Widen the trip's walking radius (persisted to the DB) when nothing is
+ * reachable within the current one. Returns the new radius and whether it
+ * actually changed (false means we've hit the ceiling).
+ */
+export async function expandWalkingRange(
+  tripId: number,
+  stepKm?: number
+): Promise<{ maxWalkingDistance: number; changed: boolean; atMax: boolean }> {
+  const res = await fetch(`${API_BASE}/api/trips/${tripId}/expand-range`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(stepKm ? { step_km: stepKm } : {}),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Failed to expand walking range (${res.status}): ${text || res.statusText}`);
+  }
+  const data = await res.json();
+  return {
+    maxWalkingDistance: Number(data.max_walking_distance),
+    changed: !!data.changed,
+    atMax: !!data.at_max,
   };
 }
 

@@ -10,10 +10,16 @@ import * as locationService from '../services/locationService.js';
 import { checkFoodIntercept, dismissFoodSuggestion, getNextFoodSuggestion, refillAndGetFood, clearLlmDeclineCooldown } from '../services/foodInterceptService.js';
 import { getRecommendedStayMinutes } from '../services/recommendedStay.js';
 import { mapEngineAttractionToActivity } from '../utils/activityMapper.js';
+import { computeExpandedRange } from '../utils/walkingRange.js';
 
 // If a visitor stays less than this fraction of the LLM-recommended duration,
 // we infer they didn't enjoy the attraction.
 const STAY_DISLIKE_RATIO = parseFloat(process.env.STAY_DISLIKE_RATIO) || 0.5;
+
+// "Walk a bit further?" — how much to widen the walking radius (km) per request,
+// and the hard ceiling we never exceed (NUMERIC(4,2) column caps at 99.99).
+const WALK_EXPAND_STEP_KM = parseFloat(process.env.WALK_EXPAND_STEP_KM) || 1.0;
+const WALK_MAX_KM = parseFloat(process.env.WALK_MAX_KM) || 20;
 
 // In-memory cache to hold arrays of recommendations returned by the Engine
 const tripRecommendationsCache = new Map();
@@ -1109,7 +1115,16 @@ export const getNextActivity = async (req, res) => {
     }
 
     if (!cached || !cached.results || cached.results.length === 0) {
-      return res.status(404).json({ error: 'No recommendations available right now.' });
+      // Nothing left within the current walking radius. This is usually a
+      // reachability limit, not a finished trip — let the client offer to widen
+      // the radius (see expandWalkingRange). We return 200 with a flag so the UI
+      // can distinguish "none in range now" from "you've seen everything".
+      return res.json({
+        activity: null,
+        userLocation: position ? { lat: current_lat, lng: current_lng } : null,
+        out_of_range: true,
+        max_walking_distance: trip.max_walking_distance != null ? Number(trip.max_walking_distance) : null,
+      });
     }
 
     const nextRec = cached.results[cached.currentIndex];
@@ -1131,6 +1146,44 @@ export const getNextActivity = async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching next activity:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Widen the trip's walking radius when nothing is reachable within the current
+// one. Persists the new max_walking_distance to the DB and clears the cached
+// recommendation batch so the next fetch uses the larger radius.
+export const expandWalkingRange = async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.id, 10);
+    if (isNaN(tripId) || tripId <= 0) return res.status(400).json({ error: 'Invalid trip ID' });
+
+    const tripCheck = await usersDb.query(
+      'SELECT max_walking_distance FROM trips WHERE trip_id = $1',
+      [tripId]
+    );
+    if (tripCheck.rowCount === 0) return res.status(404).json({ error: 'Trip not found' });
+
+    const current = tripCheck.rows[0].max_walking_distance != null
+      ? Number(tripCheck.rows[0].max_walking_distance)
+      : 0;
+
+    const requestedStep = parseFloat(req.body?.step_km);
+    const step = Number.isFinite(requestedStep) && requestedStep > 0 ? requestedStep : WALK_EXPAND_STEP_KM;
+    const { next, changed, atMax } = computeExpandedRange(current, step, WALK_MAX_KM);
+
+    if (changed) {
+      await usersDb.query(
+        'UPDATE trips SET max_walking_distance = $1, updated_at = NOW() WHERE trip_id = $2',
+        [next, tripId]
+      );
+      // Force the next getNextActivity to re-query the engine with the new radius.
+      tripRecommendationsCache.delete(tripId);
+    }
+
+    res.json({ max_walking_distance: next, previous: current, changed, at_max: atMax });
+  } catch (error) {
+    console.error('Error expanding walking range:', error);
     res.status(500).json({ error: error.message });
   }
 };
