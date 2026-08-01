@@ -53,8 +53,16 @@ controller (`completeTripActivity`) maps it to the frontend `Activity` shape (sh
 - Per-trip cap + cooldown between suggestions (in-memory per engine process; resets on restart).
 
 ## Verification
-- Engine unit tests: `engine/tests/test_companion.py`
-  (`~/.pyenv/versions/3.11.8/bin/python -m pytest engine/tests/test_companion.py`).
+- Engine unit tests (no DB; monkeypatched boundaries): `engine/tests/test_companion.py`
+  (`python -m pytest engine/tests/test_companion.py`). Cover persona-similarity
+  gating, seen/liked exclusion, mandatory reachability + route-order skipping,
+  highest-similarity persona selection, and the per-trip cap.
+- Engine DB integration tests (real DBs + real pool): `engine/tests/test_companion_integration.py`.
+  Seed a throwaway user whose preference vector == a persona embedding (cosine ~1.0),
+  record a like on a real pool stop, and assert the prompt fires; plus weird cases
+  (below-threshold, opposite vector, all-stops-seen, unreachable, liked-not-in-pool,
+  no-GPS fallback, per-trip cap). Auto-skips when a DB or the pool is unavailable, and
+  deletes everything it seeds (deleting the user cascades to trips/feedback/preferences).
 - Node mapper tests: `node --test api/tests/activityMapper.test.js` (or `npm test` in `api/`).
 - Web has no test harness; the popup is covered manually.
 

@@ -152,6 +152,45 @@ def test_reachability_uses_liked_place_when_no_live_position(monkeypatch):
     assert result["place_id"] == NEAR_ID
 
 
+def test_skips_far_stop_and_picks_next_reachable(monkeypatch):
+    # Route order puts the FAR stop first; the service must skip it (mandatory
+    # reachability) and pick the next reachable stop in order.
+    _install(monkeypatch, stops=[
+        _stop(FAR_ID, FAR_LAT, FAR_LNG, 0),
+        _stop(NEAR_ID, NEAR_LAT, NEAR_LNG, 1),
+    ])
+    service = CompanionSuggestionService()
+    result = service.suggest(1, 1, LIKED_ID)
+    assert result is not None
+    assert result["place_id"] == NEAR_ID
+
+
+def test_picks_highest_similarity_persona_among_candidates(monkeypatch):
+    # The liked place belongs to two popular trips; the service must match the
+    # trip whose persona is most similar to the user's preference vector.
+    _install(monkeypatch, popular_trips=[
+        {
+            "popular_trip_id": 10,
+            "persona_id": 1,
+            "persona_slug": "off-persona",
+            "persona_name": "Off Persona",
+            "persona_embedding": PERSONA_ORTHOGONAL,  # cosine 0.0 -> below threshold
+        },
+        {
+            "popular_trip_id": 20,
+            "persona_id": 2,
+            "persona_slug": "matched-persona",
+            "persona_name": "Matched Persona",
+            "persona_embedding": PERSONA_ALIGNED,     # cosine 1.0 -> chosen
+        },
+    ])
+    service = CompanionSuggestionService()
+    result = service.suggest(1, 1, LIKED_ID)
+    assert result is not None
+    assert result["popular_trip_id"] == 20
+    assert result["persona_slug"] == "matched-persona"
+
+
 def test_per_trip_cap(monkeypatch):
     _install(monkeypatch)
     monkeypatch.setattr(cs, "COOLDOWN_LIKES", 0)  # disable cooldown to isolate the cap
