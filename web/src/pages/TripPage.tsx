@@ -108,6 +108,10 @@ export function TripPage() {
           }
           if (activity) {
             sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(activity));
+          } else if (result.outOfRange && WALK_FURTHER_ENABLED) {
+            // Trip opened with nothing left in range: offer to walk further
+            // instead of immediately showing the trip-complete summary.
+            setRangePrompt({ maxWalkingDistance: result.maxWalkingDistance ?? null });
           }
         }
         setCurrentActivity(activity);
