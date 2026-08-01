@@ -409,3 +409,47 @@ export const loginUser = async (req, res) => {
   }
 };
 
+// POST /api/users/reset-password
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, new_password, confirm_password } = req.body;
+
+    if (!email || !new_password || !confirm_password) {
+      return res.status(400).json({
+        error: 'Email, new_password, and confirm_password are required',
+      });
+    }
+
+    if (new_password !== confirm_password) {
+      return res.status(400).json({ error: 'Passwords do not match' });
+    }
+
+    if (new_password.length < 6) {
+      return res.status(400).json({
+        error: 'Password must be at least 6 characters long',
+      });
+    }
+
+    const userCheck = await usersDb.query(
+      'SELECT id FROM users WHERE email = $1',
+      [email]
+    );
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'No account found with that email' });
+    }
+
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(new_password, saltRounds);
+
+    await usersDb.query(
+      'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE email = $2',
+      [passwordHash, email]
+    );
+
+    res.json({ message: 'Password reset successfully' });
+  } catch (error) {
+    console.error('Error resetting password:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+

@@ -70,6 +70,35 @@ export async function loginUser(email: string, password: string): Promise<AuthUs
   return { id: user.id, username: user.username };
 }
 
+export async function resetPassword(email: string, newPassword: string, confirmPassword: string): Promise<void> {
+  const body = {
+    email,
+    new_password: newPassword,
+    confirm_password: confirmPassword,
+  };
+
+  const res = await fetch(`${API_BASE}/api/users/reset-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => '');
+    try {
+      const data = JSON.parse(errorText) as { error?: string };
+      if (data.error) throw new Error(data.error);
+    } catch (e) {
+      if (e instanceof Error && e.message !== errorText) throw e;
+    }
+    throw new Error(
+      `Failed to reset password (status ${res.status}): ${errorText || res.statusText}`,
+    );
+  }
+}
+
 export function setCurrentUser(user: AuthUser) {
   window.localStorage.setItem('currentUser', JSON.stringify(user));
 }

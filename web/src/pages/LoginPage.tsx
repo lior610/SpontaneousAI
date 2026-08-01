@@ -155,9 +155,9 @@ export const LoginPage = () => {
                   </div>
                 </div>
                 <div className="flex justify-end">
-                  <button type="button" className="text-sm text-primary hover:underline">
+                  <Link to="/forgot-password" className="text-sm text-primary hover:underline">
                     Forgot password?
-                  </button>
+                  </Link>
                 </div>
                 <button
                   type="submit"
