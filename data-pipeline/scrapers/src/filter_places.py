@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -87,17 +88,20 @@ def extract_unique_categories(input_file):
     return output_data
 
 # Filter category helper functions
+def _compile_keyword_pattern(keywords):
+    # Match any keyword as a whole word/phrase, case-insensitive.
+    # \b ensures "Market" no longer matches inside "Supermarket".
+    alternation = "|".join(re.escape(k) for k in keywords)
+    return re.compile(rf"\b(?:{alternation})\b", re.IGNORECASE)
+
+_ATTRACTION_RE = _compile_keyword_pattern(ATTRACTION_KEYWORDS)
+_UTILITY_RE = _compile_keyword_pattern(UTILITY_KEYWORDS)
+
 def is_attraction(cat_name):
-    for keyword in ATTRACTION_KEYWORDS:
-        if keyword.lower() in cat_name.lower():
-            return True
-    return False
+    return bool(_ATTRACTION_RE.search(cat_name))
 
 def is_utility(cat_name):
-    for keyword in UTILITY_KEYWORDS:
-        if keyword.lower() in cat_name.lower():
-            return True
-    return False
+    return bool(_UTILITY_RE.search(cat_name))
 
 def classify_category(category):
     """Classify category as 'attraction' or 'utility'."""
