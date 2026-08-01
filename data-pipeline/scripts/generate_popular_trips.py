@@ -29,10 +29,14 @@ Env vars:
     POPULAR_TRIPS_CATALOG_LIMIT- default: 150 (max attractions offered to the LLM per city)
     LOCATION_SLUG              - optional; restrict generation to one location
     POSTGRES_*                 - DB connection (see load_places_to_db.py)
+
+Loads project-root .env first, then data-pipeline/scrapers/.env for any
+missing keys (so GEMINI_* from the scrapers env is picked up automatically).
 """
 import json
 import os
 import sys
+import time
 import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -40,7 +44,9 @@ from typing import List, Dict, Any, Optional
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 try:
     from dotenv import load_dotenv
+    # Root .env for DB/shared config; scrapers .env fills Gemini key/model if missing.
     load_dotenv(PROJECT_ROOT / ".env", override=True)
+    load_dotenv(PROJECT_ROOT / "data-pipeline" / "scrapers" / ".env", override=False)
 except ImportError:
     pass
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -206,7 +212,8 @@ def build_prompt(persona: Dict[str, str], city_name: str, catalog: List[Dict[str
     )
 
 
-def call_gemini(prompt: str) -> Optional[Dict[str, Any]]:
+def call_gemini(prompt: str, max_retries: int = 6) -> Optional[Dict[str, Any]]:
+    """Call Gemini with backoff on transient 503/429 overload errors."""
     if not GEMINI_API_KEY:
         logger.error("GEMINI_API_KEY not set; cannot generate popular trips")
         return None
@@ -223,15 +230,28 @@ def call_gemini(prompt: str) -> Optional[Dict[str, Any]]:
             "thinkingConfig": {"thinkingBudget": 0},
         },
     }
-    try:
-        res = requests.post(url, json=payload, timeout=30,
-                            headers={"Content-Type": "application/json"})
-        res.raise_for_status()
-        text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
-        return json.loads(text)
-    except (requests.RequestException, KeyError, IndexError, json.JSONDecodeError) as err:
-        logger.error(f"Gemini request/parse failed: {err}")
-        return None
+    for attempt in range(1, max_retries + 1):
+        try:
+            res = requests.post(
+                url, json=payload, timeout=90,
+                headers={"Content-Type": "application/json"},
+            )
+            if res.status_code in (429, 503):
+                wait = min(60, 2 ** attempt)
+                logger.warning(
+                    f"Gemini {res.status_code} on {GEMINI_MODEL} "
+                    f"(attempt {attempt}/{max_retries}); retrying in {wait}s"
+                )
+                time.sleep(wait)
+                continue
+            res.raise_for_status()
+            text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
+            return json.loads(text)
+        except (requests.RequestException, KeyError, IndexError, json.JSONDecodeError) as err:
+            logger.error(f"Gemini request/parse failed: {err}")
+            return None
+    logger.error(f"Gemini still unavailable for {GEMINI_MODEL} after {max_retries} attempts")
+    return None
 
 
 def validate_trip(trip: Dict[str, Any], catalog_ids: set) -> Optional[Dict[str, Any]]:
@@ -354,6 +374,7 @@ def main():
                     if insert_trip(conn, loc["id"], persona_id, trip, member_embeddings):
                         total_trips += 1
                 logger.info(f"  persona '{persona['slug']}': {len(valid_trips)} trips")
+                time.sleep(2)  # ease rate pressure between persona calls
 
         logger.info(f"Done. Generated {total_trips} popular trips across {len(locations)} location(s).")
     finally:
