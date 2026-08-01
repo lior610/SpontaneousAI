@@ -104,15 +104,30 @@ def is_utility(cat_name):
     return bool(_UTILITY_RE.search(cat_name))
 
 def classify_category(category):
-    """Classify category as 'attraction' or 'utility'."""
+    """Classify category as 'utility' or 'attraction'."""
     
-    # Check if it's an ATTRACTION first (takes priority)
-    if is_attraction(category):
-        return 'attraction'
-    
-    # Then check if it's a utility
-    elif is_utility(category):
+    # Check if it's a UTILITY first (takes priority)
+    if is_utility(category):
         return 'utility'
+    
+    # Then check if it's an attraction
+    elif is_attraction(category):
+        return 'attraction'
+    return None
+
+def classify_place(categories):
+    """Classify a place from its list of categories.
+
+    Utility takes priority: if any category is a utility (pharmacy, grocery,
+    supermarket, convenience, etc.) the place is a utility even when it also
+    carries an attraction category. Otherwise it's an attraction.
+    """
+    if not categories:
+        return None
+    if any(is_utility(c) for c in categories):
+        return 'utility'
+    if any(is_attraction(c) for c in categories):
+        return 'attraction'
     return None
 
 def filter_categories(categories):
@@ -169,11 +184,11 @@ def filter_places(places_file, attractions_cats, utilities_cats):
         # Check if any category exists in our filtered lists
         matched_type = None
         for category in place_categories:
-            if category in attractions_set:
-                matched_type = 'attraction'
-                break  # Prefer attraction if multiple categories
-            elif category in utilities_set:
+            if category in utilities_set:
                 matched_type = 'utility'
+                break  # Prefer utility if multiple categories
+            elif category in attractions_set:
+                matched_type = 'attraction'
         
         # Only include places that have at least one valid category
         if matched_type:
