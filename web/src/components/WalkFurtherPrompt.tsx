@@ -34,11 +34,11 @@ export function WalkFurtherPrompt({
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-accent/10 text-accent">
           <Footprints className="h-6 w-6" />
         </div>
-        <h2 className="text-lg font-bold">Nothing left within your range</h2>
+        <h2 className="text-lg font-bold">Not enough nearby attractions</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           {maxWalkingDistance != null
-            ? `We couldn't find anything else within ${maxWalkingDistance} km. Want to walk a bit further?`
-            : "We couldn't find anything else nearby. Want to walk a bit further?"}
+            ? `We couldn't find anything else within ${maxWalkingDistance} km. Enlarge your max walking distance to keep exploring, or try again later when more places are open.`
+            : "We couldn't find enough nearby attractions right now. Enlarge your max walking distance to keep exploring, or try again later when more places are open."}
         </p>
 
         <div className="mt-5 grid gap-3">
@@ -51,8 +51,8 @@ export function WalkFurtherPrompt({
             {isExpanding
               ? 'Finding more…'
               : nextRadius != null
-                ? `Walk a bit further (+${stepKm} km → ${nextRadius} km)`
-                : `Walk a bit further (+${stepKm} km)`}
+                ? `Enlarge walking distance (+${stepKm} km → ${nextRadius} km)`
+                : `Enlarge walking distance (+${stepKm} km)`}
           </button>
           <button
             onClick={onFinish}
@@ -60,7 +60,7 @@ export function WalkFurtherPrompt({
             className="inline-flex items-center justify-center gap-2 w-full h-12 px-4 rounded-lg text-sm font-semibold border-2 border-border text-foreground bg-transparent hover:bg-muted transition-all duration-300 disabled:opacity-60"
           >
             <Flag className="w-4 h-4" />
-            No thanks, finish my trip
+            Try again later / finish trip
           </button>
         </div>
       </div>

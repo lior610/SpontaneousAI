@@ -147,6 +147,37 @@ export function TripPage() {
     finishActivity(feedback);
   };
 
+  // Shared state update for any "next activity" response (regular or food intercept)
+  const applyActivityResult = (result: NextActivityResponse) => {
+    setCurrentActivity(result.activity);
+    setIsFoodIntercept(result.card_type === 'food_intercept');
+    if (result.userLocation) {
+      setUserLocation(result.userLocation);
+      if (tripId) sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(result.userLocation));
+    }
+    if (result.activity && tripId) {
+      sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(result.activity));
+      console.log(`[TripPage] Next Activity Generated: ${result.activity.title} at [${result.activity.lat}, ${result.activity.lng}]`);
+    }
+  };
+
+  // Shared handler for any next-activity response. Returns true when the
+  // walk-further prompt was shown (caller should not treat that as a normal activity).
+  const handleNextActivityResult = (result: NextActivityResponse, notifyNext?: boolean): boolean => {
+    if (!result.activity && result.outOfRange && WALK_FURTHER_ENABLED && !tripFinished) {
+      setRangePrompt({ maxWalkingDistance: result.maxWalkingDistance ?? null });
+      setCurrentActivity(null);
+      return true;
+    }
+
+    setRangePrompt(null);
+    applyActivityResult(result);
+    if (result.activity && notifyNext) {
+      showAppNotification('Next Destination Ready', `Head over to: ${result.activity.title}`);
+    }
+    return false;
+  };
+
   // Fetch and display the next recommended activity from the engine.
   const advanceToNextActivity = async (notifyNext?: boolean) => {
     if (!tripId) return;
@@ -154,20 +185,7 @@ export function TripPage() {
     setIsLoading(true);
     try {
       const result = await fetchNextActivity(tripId);
-
-      // Nothing within the current radius: offer to walk further instead of
-      // declaring the trip finished.
-      if (!result.activity && result.outOfRange && WALK_FURTHER_ENABLED && !tripFinished) {
-        setRangePrompt({ maxWalkingDistance: result.maxWalkingDistance ?? null });
-        setCurrentActivity(null);
-        return;
-      }
-
-      setRangePrompt(null);
-      applyActivityResult(result);
-      if (result.activity && notifyNext) {
-        showAppNotification('Next Destination Ready', `Head over to: ${result.activity.title}`);
-      }
+      handleNextActivityResult(result, notifyNext);
     } catch (err) {
       console.error('[TripPage] Failed to fetch next activity:', err);
     } finally {
@@ -268,20 +286,6 @@ export function TripPage() {
     await advanceToNextActivity();
   };
 
-  // Shared state update for any "next activity" response (regular or food intercept)
-  const applyActivityResult = (result: NextActivityResponse) => {
-    setCurrentActivity(result.activity);
-    setIsFoodIntercept(result.card_type === 'food_intercept');
-    if (result.userLocation) {
-      setUserLocation(result.userLocation);
-      if (tripId) sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(result.userLocation));
-    }
-    if (result.activity && tripId) {
-      sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(result.activity));
-      console.log(`[TripPage] Next Activity Generated: ${result.activity.title} at [${result.activity.lat}, ${result.activity.lng}]`);
-    }
-  };
-
   // Cycles through the cached food batch (next restaurant from the same engine call)
   const handleRefreshFood = async () => {
     if (!tripId) return;
@@ -320,17 +324,8 @@ export function TripPage() {
   // User chose "Return" — go back to regular activities
   const handleReturnFromFood = async () => {
     if (!tripId) return;
-    setIsLoading(true);
     setFoodBatchExhausted(false);
-    try {
-      sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
-      const result = await fetchNextActivity(tripId);
-      applyActivityResult(result);
-    } catch (e) {
-      console.error('[TripPage] Failed to fetch next activity:', e);
-    } finally {
-      setIsLoading(false);
-    }
+    await advanceToNextActivity();
   };
 
   // Dismiss food (starts cooldown) or skip regular activity, then fetch next
@@ -347,7 +342,7 @@ export function TripPage() {
       }
       sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
       const result = await fetchNextActivity(tripId);
-      applyActivityResult(result);
+      handleNextActivityResult(result);
     } catch (e) {
       console.error('[TripPage] Failed to fetch next activity:', e);
     } finally {
