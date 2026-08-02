@@ -52,14 +52,18 @@ async def get_closest_utilities(
         results = []
         for row in rows:
             record = dict(zip(cols, row))
-            
+
             if record.get('latitude') is not None and record.get('longitude') is not None:
                 record['distance'] = haversine(lat, lng, record['latitude'], record['longitude'])
             else:
                 record['distance'] = None
-            
+
             results.append(record)
-            if len(results) >= limit:
-                break
-                
-        return results
+
+        # Re-sort by accurate haversine distance. The SQL orders by an approximate
+        # (flat-earth) distance for a fast index-friendly scan; sorting here on the
+        # exact great-circle distance guarantees true-nearest-first ordering.
+        # Records without coordinates sort last.
+        results.sort(key=lambda r: r['distance'] if r['distance'] is not None else float('inf'))
+
+        return results[:limit]

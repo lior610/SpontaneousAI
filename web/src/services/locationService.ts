@@ -84,7 +84,7 @@ export function getCurrentPosition(): Promise<Coords | null> {
         console.warn('[LocationService] GPS failed:', err.message);
         resolve(null);
       },
-      { enableHighAccuracy: false, timeout: 10000 }
+      { enableHighAccuracy: false, timeout: 3000 }
     );
   });
 }

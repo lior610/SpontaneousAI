@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Settings, MapPin, RefreshCw, LogOut, Home, Briefcase } from 'lucide-react';
+import { Settings, MapPin, RefreshCw, LogOut, Home, Briefcase, Pill, HeartPulse, ShoppingCart, Store, ShieldAlert, Utensils } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ActivityCard } from '@/components/ActivityCard';
 import { FeedbackPopup, FeedbackChoice } from '@/components/FeedbackPopup';
@@ -12,17 +12,25 @@ import { MapView } from '@/components/MapView';
 import { Activity, TripSetup, defaultTripSetup, NextActivityResponse } from '@/types/trip';
 import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchCompletedActivities, CompletedActivityLog, CompanionSuggestion, expandWalkingRange } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
-import { getCurrentPosition, startTracking, stopTracking, watchArrivalDeparture } from '@/services/locationService';
+import { getCurrentPosition, reportPosition, startTracking, stopTracking, watchArrivalDeparture } from '@/services/locationService';
 import { showAppNotification } from '@/services/notificationService';
 import { featureFlags } from '@/config/featureFlags';
 
-const GPS_ENABLED = import.meta.env.VITE_GPS_ENABLED === 'on';
 const COMPANION_ENABLED = featureFlags.companionSuggestions.enabled;
 const WALK_FURTHER_ENABLED = featureFlags.walkFurther.enabled;
 const WALK_FURTHER_STEP_KM = featureFlags.walkFurther.stepKm;
 
 const ACTIVITY_CACHE_KEY = (id: number) => `trip_${id}_current_activity`;
 const LOCATION_CACHE_KEY = (id: number) => `trip_${id}_user_location`;
+
+const SPECIFIC_NEEDS = [
+  { key: 'food', icon: Utensils, label: 'Food Break' },
+  { key: 'pharmacy', icon: Pill, label: 'Pharmacy' },
+  { key: 'medical', icon: HeartPulse, label: 'Medical' },
+  { key: 'grocery', icon: ShoppingCart, label: 'Grocery' },
+  { key: 'convenience', icon: Store, label: 'Convenience' },
+  { key: 'police_emergency', icon: ShieldAlert, label: 'Police Emergency' },
+] as const;
 
 function toActivity(c: CompletedActivityLog): Activity {
   return {
@@ -64,13 +72,13 @@ export function TripPage() {
   const [isExpandingRange, setIsExpandingRange] = useState(false);
   // Set only when the user explicitly chooses to finish (or we can't widen further).
   const [tripFinished, setTripFinished] = useState(false);
+  const [showNeeds, setShowNeeds] = useState(false);
   const initialLoadDone = useRef(false);
   // ISO timestamp of when the geofence detected the user arrived at the current attraction.
   const arrivedAtRef = useRef<string | null>(null);
 
   // Fetch browser GPS once on load
   useEffect(() => {
-    if (import.meta.env.VITE_GPS_ENABLED !== 'on') return;
     getCurrentPosition().then((coords) => {
       if (coords) setUserLocation(coords);
     });
@@ -99,6 +107,16 @@ export function TripPage() {
             setUserLocation(prev => prev ?? JSON.parse(cachedLocation));
           }
         } else {
+          if (navigator.geolocation) {
+            const coords = await getCurrentPosition();
+            if (coords) {
+              await reportPosition(tripId, coords).catch(e =>
+                console.error('[TripPage] Failed to report initial load position:', e)
+              );
+              setUserLocation(coords);
+              sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(coords));
+            }
+          }
           const result = await fetchNextActivity(tripId);
           activity = result.activity;
           setIsFoodIntercept(result.card_type === 'food_intercept');
@@ -291,6 +309,12 @@ export function TripPage() {
     if (!tripId) return;
     setIsLoading(true);
     try {
+      if (userLocation) {
+        await reportPosition(tripId, userLocation).catch(e =>
+          console.error('[TripPage] Failed to report refresh food position:', e)
+        );
+        sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(userLocation));
+      }
       const result = await fetchNextFoodSuggestion(tripId);
       if (result.activity) {
         applyActivityResult(result);
@@ -309,6 +333,12 @@ export function TripPage() {
     if (!tripId) return;
     setIsLoading(true);
     try {
+      if (userLocation) {
+        await reportPosition(tripId, userLocation).catch(e =>
+          console.error('[TripPage] Failed to report refill food position:', e)
+        );
+        sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(userLocation));
+      }
       const result = await fetchNextFoodSuggestion(tripId);
       if (result.activity) {
         setFoodBatchExhausted(false);
@@ -325,6 +355,12 @@ export function TripPage() {
   const handleReturnFromFood = async () => {
     if (!tripId) return;
     setFoodBatchExhausted(false);
+    if (userLocation) {
+      await reportPosition(tripId, userLocation).catch(e =>
+        console.error('[TripPage] Failed to report return food position:', e)
+      );
+      sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(userLocation));
+    }
     await advanceToNextActivity();
   };
 
@@ -333,6 +369,12 @@ export function TripPage() {
     if (!tripId || !currentActivity) return;
     setIsLoading(true);
     try {
+      if (userLocation) {
+        await reportPosition(tripId, userLocation).catch(e =>
+          console.error('[TripPage] Failed to report skip position:', e)
+        );
+        sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(userLocation));
+      }
       if (isFoodIntercept) {
         await dismissFoodIntercept(tripId);
       } else {
@@ -350,10 +392,31 @@ export function TripPage() {
     }
   };
 
+  const handleSpecificNeed = async (need: string) => {
+    if (!tripId) return;
+    setShowNeeds(false);
+    setIsLoading(true);
+    try {
+      if (userLocation) {
+        await reportPosition(tripId, userLocation).catch(e =>
+          console.error('[TripPage] Failed to report specific-need position:', e)
+        );
+        sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(userLocation));
+      }
+      sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
+      const result = await fetchNextActivity(tripId, need);
+      applyActivityResult(result);
+    } catch (e) {
+      console.error('[TripPage] Failed to fetch specific need:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Geofence: detect arrival/departure at the current attraction to measure dwell time.
   // On arrival we record the timestamp; on departure we prompt the feedback popup.
   useEffect(() => {
-    if (!GPS_ENABLED || !currentActivity || currentActivity.lat == null || currentActivity.lng == null) {
+    if (!currentActivity || currentActivity.lat == null || currentActivity.lng == null) {
       return;
     }
     arrivedAtRef.current = null;
@@ -389,12 +452,12 @@ export function TripPage() {
       <header className="sticky top-0 z-20 bg-card/80 backdrop-blur-md border-b">
         <div className="px-4 py-3">
           <div className="flex items-center justify-between mb-2">
-            <div>
+            <div className="min-w-0 mr-4">
               <h1 className="font-bold text-lg flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-primary" />
-                {tripSetup.destination || 'Your Trip'}
+                <MapPin className="w-5 h-5 text-primary flex-shrink-0" />
+                <span className="truncate">{tripSetup.destination || 'Your Trip'}</span>
               </h1>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground truncate">
                 {completedActivities.length} activities completed
               </p>
             </div>
@@ -487,7 +550,7 @@ export function TripPage() {
                 )}
                 <span>Activity #{completedActivities.length + 1}</span>
               </div>
-              {GPS_ENABLED && hasArrived && (
+              {hasArrived && (
                 <div className="flex items-center gap-2 text-sm rounded-lg px-3 py-2 border bg-secondary/10 text-secondary border-secondary/20">
                   <MapPin className="w-4 h-4" />
                   You've arrived — we'll ask how it went when you leave.
@@ -513,6 +576,16 @@ export function TripPage() {
                   <RefreshCw className="w-4 h-4" />
                   {isFoodIntercept ? 'Not hungry? Skip food break' : 'Not feeling it? Get another suggestion'}
                 </button>
+
+                {featureFlags.feedbackPopup.showSpecificNeeds && (
+                  <button
+                    onClick={() => setShowNeeds(true)}
+                    className="inline-flex items-center gap-2 h-9 px-4 rounded-md text-sm font-semibold text-foreground hover:bg-muted transition-all duration-300"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    I need something specific right now
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -571,6 +644,39 @@ export function TripPage() {
           onAccept={handleCompanionAccept}
           onDismiss={handleCompanionDismiss}
         />
+      )}
+
+      {/* Specific Needs Popup */}
+      {showNeeds && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-foreground/45 backdrop-blur-sm animate-fade-in"
+          onClick={() => setShowNeeds(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border bg-card shadow-2xl animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6">
+              <h3 className="text-lg font-bold">What do you need right now?</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                We'll point you to the nearest option.
+              </p>
+
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                {SPECIFIC_NEEDS.map(({ key, icon: Icon, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => handleSpecificNeed(key)}
+                    className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-border hover:border-accent hover:bg-accent/10 transition-all duration-200"
+                  >
+                    <Icon className="w-6 h-6 text-accent" />
+                    <span className="font-medium text-sm">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {showLogoutConfirm && (
