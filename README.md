@@ -39,3 +39,43 @@ For deploying to a production server (which compiles the frontend to static file
 docker-compose -f docker-compose.prod.yml up -d --build
 ```
 **Note:** The production configuration binds ports 80 and 443 to the web container and looks for SSL certificates in `/etc/ssl/cs`. Ensure your certificates match the configuration in `web/nginx.conf` before deploying.
+
+---
+
+## 📱 Mobile Native App Installation (Android & iOS)
+
+SpontaneousAI includes a native mobile container built with **Capacitor**, providing continuous background location tracking (`onArrive` and `onDepart`) and native system notifications.
+
+### 1. Generating Mobile Artifacts via GitHub Actions
+Mobile builds are compiled manually via GitHub Actions to produce ready-to-install binaries:
+1. Go to your GitHub repository -> **Actions** tab.
+2. Select the **Build Mobile App Artifacts (Android & iOS)** workflow.
+3. Click **Run workflow** (select the `native-app-develop` branch).
+4. Once completed, scroll down to **Artifacts** to download:
+   - `SpontaneousAI-Android-APK` (`app-debug.apk`)
+   - `SpontaneousAI-iOS-App` (`SpontaneousAI-iOS-App.zip`)
+
+---
+
+### 2. Installing on Android
+1. Download `app-debug.apk` onto your Android phone or transfer it via USB.
+2. Open the file on your device. If prompted, enable **"Install unknown apps"** for your File Manager or Chrome.
+3. Tap **Install** and open **SpontaneousAI**.
+4. Grant Location ("Allow all the time" for continuous background geofencing) and Notification permissions when prompted.
+
+---
+
+### 3. Installing on iOS (iPhone / iOS Simulator)
+
+#### Option A: Running in iOS Simulator (Mac)
+1. Download and unzip `SpontaneousAI-iOS-App.zip` on your Mac.
+2. Open **Xcode** -> Open Developer Tool -> **Simulator**.
+3. Drag and drop `App.app` directly onto the iOS Simulator window.
+
+#### Option B: Installing on physical iPhone via Helper Script (Mac)
+Connect your iPhone to your Mac via USB, download `SpontaneousAI-iOS-IPA.zip` from GitHub Actions, unzip `SpontaneousAI.ipa`, and run:
+```bash
+chmod +x ./scripts/install-ios-ipa.sh
+./scripts/install-ios-ipa.sh /path/to/SpontaneousAI.ipa
+```
+

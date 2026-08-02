@@ -65,6 +65,53 @@ CREATE INDEX IF NOT EXISTS idx_attractions_location_id ON attractions(location_i
 CREATE INDEX IF NOT EXISTS idx_attractions_location_cluster ON attractions(location_cluster_id);
 CREATE INDEX IF NOT EXISTS idx_attractions_location_cluster_composite ON attractions(location_id, location_cluster_id);
 
+-- ---------------------------------------------------------------------------
+-- Popular trips pool (one-time, LLM-generated, grounded to real attractions).
+--
+-- personas             : reusable "types of people in society"; description is
+--                        embedded and used as the match vector against a user's
+--                        preference vector at runtime.
+-- popular_trips        : one LLM route, scoped to a city (location) and tagged
+--                        with a persona. Its embedding is the mean of member
+--                        attraction embeddings (theme vector, tie-breaking only).
+-- popular_trip_attractions : ordered membership of real attractions per trip.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS personas (
+    id SERIAL PRIMARY KEY,
+    slug TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    embedding vector(384) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS popular_trips (
+    id SERIAL PRIMARY KEY,
+    location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+    persona_id INTEGER NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    description TEXT,
+    embedding vector(384),
+    model TEXT,                 -- provenance: which LLM produced this trip
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_popular_trips_location ON popular_trips(location_id);
+CREATE INDEX IF NOT EXISTS idx_popular_trips_persona ON popular_trips(persona_id);
+
+CREATE TABLE IF NOT EXISTS popular_trip_attractions (
+    id SERIAL PRIMARY KEY,
+    popular_trip_id INTEGER NOT NULL REFERENCES popular_trips(id) ON DELETE CASCADE,
+    place_id TEXT NOT NULL REFERENCES attractions(place_id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    UNIQUE(popular_trip_id, place_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pta_trip ON popular_trip_attractions(popular_trip_id);
+-- Critical index: "which popular trips contain the attraction the user just liked?"
+CREATE INDEX IF NOT EXISTS idx_pta_place ON popular_trip_attractions(place_id);
+
 -- Create the client_info database (for users, trips, preferences)
 CREATE DATABASE client_info;
 

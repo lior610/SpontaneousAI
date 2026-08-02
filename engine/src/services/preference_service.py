@@ -397,7 +397,7 @@ class PreferenceComposer:
         if dietary and dietary != "none":
             parts.append(dietary)
 
-        transport = trip.get("preferred_transportation")
+        transport = trip.get("preferred_transportation") or "walking"
         if transport == "walking":
             parts.append("walkable")
         elif transport == "public":

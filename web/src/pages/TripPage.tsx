@@ -4,17 +4,21 @@ import { Settings, MapPin, RefreshCw, LogOut, Home, Briefcase, Pill, HeartPulse,
 import { Button } from '@/components/ui/button';
 import { ActivityCard } from '@/components/ActivityCard';
 import { FeedbackPopup, FeedbackChoice } from '@/components/FeedbackPopup';
+import { CompanionSuggestionPopup } from '@/components/CompanionSuggestionPopup';
+import { WalkFurtherPrompt } from '@/components/WalkFurtherPrompt';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import { MapView } from '@/components/MapView';
 import { Activity, TripSetup, defaultTripSetup, NextActivityResponse } from '@/types/trip';
-import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchCompletedActivities, CompletedActivityLog } from '@/services/tripService';
+import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchCompletedActivities, CompletedActivityLog, CompanionSuggestion, expandWalkingRange } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
 import { getCurrentPosition, reportPosition, startTracking, stopTracking, watchArrivalDeparture } from '@/services/locationService';
 import { showAppNotification } from '@/services/notificationService';
 import { featureFlags } from '@/config/featureFlags';
 
-
+const COMPANION_ENABLED = featureFlags.companionSuggestions.enabled;
+const WALK_FURTHER_ENABLED = featureFlags.walkFurther.enabled;
+const WALK_FURTHER_STEP_KM = featureFlags.walkFurther.stepKm;
 
 const ACTIVITY_CACHE_KEY = (id: number) => `trip_${id}_current_activity`;
 const LOCATION_CACHE_KEY = (id: number) => `trip_${id}_user_location`;
@@ -58,10 +62,16 @@ export function TripPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasArrived, setHasArrived] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [companionSuggestion, setCompanionSuggestion] = useState<CompanionSuggestion | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isFoodIntercept, setIsFoodIntercept] = useState(false);
   const [foodBatchExhausted, setFoodBatchExhausted] = useState(false);
+  // Set when the engine has nothing left within the current walking radius.
+  const [rangePrompt, setRangePrompt] = useState<{ maxWalkingDistance: number | null } | null>(null);
+  const [isExpandingRange, setIsExpandingRange] = useState(false);
+  // Set only when the user explicitly chooses to finish (or we can't widen further).
+  const [tripFinished, setTripFinished] = useState(false);
   const [showNeeds, setShowNeeds] = useState(false);
   const initialLoadDone = useRef(false);
   // ISO timestamp of when the geofence detected the user arrived at the current attraction.
@@ -116,6 +126,10 @@ export function TripPage() {
           }
           if (activity) {
             sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(activity));
+          } else if (result.outOfRange && WALK_FURTHER_ENABLED) {
+            // Trip opened with nothing left in range: offer to walk further
+            // instead of immediately showing the trip-complete summary.
+            setRangePrompt({ maxWalkingDistance: result.maxWalkingDistance ?? null });
           }
         }
         setCurrentActivity(activity);
@@ -146,67 +160,8 @@ export function TripPage() {
     setShowFeedback(false);
     let feedback: Activity['feedback'] | undefined;
     if (choice === 'liked') feedback = { liked: true };
-    else if (choice === 'skipped') feedback = { liked: false };
     else feedback = undefined;
     finishActivity(feedback);
-  };
-
-  // Mark the current activity done and advance to the next one. The backend uses the
-  // arrival timestamp (from the geofence) to measure dwell time; when no explicit
-  // feedback is given it asks the LLM whether the user likely didn't enjoy it.
-  const finishActivity = async (feedback?: Activity['feedback'], notifyNext?: boolean) => {
-    if (!tripId || finishingRef.current) return;
-    finishingRef.current = true;
-
-    const arrivedAt = arrivedAtRef.current;
-
-    if (currentActivity) {
-      const finalLat = userLocation?.lat ?? currentActivity.lat;
-      const finalLng = userLocation?.lng ?? currentActivity.lng;
-
-      try {
-        await completeActivity(
-          tripId,
-          { ...currentActivity, lat: finalLat, lng: finalLng },
-          { arrivedAt, feedback }
-        );
-      } catch (err) {
-        console.error('[TripPage] Failed to complete activity:', err);
-      }
-
-      if (finalLat != null && finalLng != null) {
-        const newLoc = { lat: finalLat, lng: finalLng };
-        setUserLocation(newLoc);
-        sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(newLoc));
-      }
-
-      // Refresh history so the resulting feedback (explicit or auto-derived) is reflected.
-      try {
-        const completed = await fetchCompletedActivities(tripId);
-        setCompletedActivities(completed.map(toActivity));
-      } catch (err) {
-        console.error('[TripPage] Failed to refresh completed activities:', err);
-      }
-    }
-
-    // Reset arrival tracking for the next attraction.
-    arrivedAtRef.current = null;
-    setHasArrived(false);
-
-    sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
-    setIsLoading(true);
-    try {
-      const result = await fetchNextActivity(tripId);
-      applyActivityResult(result);
-      if (result.activity && notifyNext) {
-        showAppNotification('Next Destination Ready', `Head over to: ${result.activity.title}`);
-      }
-    } catch (err) {
-      console.error('[TripPage] Failed to fetch next activity:', err);
-    } finally {
-      setIsLoading(false);
-      finishingRef.current = false;
-    }
   };
 
   // Shared state update for any "next activity" response (regular or food intercept)
@@ -221,6 +176,131 @@ export function TripPage() {
       sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(result.activity));
       console.log(`[TripPage] Next Activity Generated: ${result.activity.title} at [${result.activity.lat}, ${result.activity.lng}]`);
     }
+  };
+
+  // Shared handler for any next-activity response. Returns true when the
+  // walk-further prompt was shown (caller should not treat that as a normal activity).
+  const handleNextActivityResult = (result: NextActivityResponse, notifyNext?: boolean): boolean => {
+    if (!result.activity && result.outOfRange && WALK_FURTHER_ENABLED && !tripFinished) {
+      setRangePrompt({ maxWalkingDistance: result.maxWalkingDistance ?? null });
+      setCurrentActivity(null);
+      return true;
+    }
+
+    setRangePrompt(null);
+    applyActivityResult(result);
+    if (result.activity && notifyNext) {
+      showAppNotification('Next Destination Ready', `Head over to: ${result.activity.title}`);
+    }
+    return false;
+  };
+
+  // Fetch and display the next recommended activity from the engine.
+  const advanceToNextActivity = async (notifyNext?: boolean) => {
+    if (!tripId) return;
+    sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
+    setIsLoading(true);
+    try {
+      const result = await fetchNextActivity(tripId);
+      handleNextActivityResult(result, notifyNext);
+    } catch (err) {
+      console.error('[TripPage] Failed to fetch next activity:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // User agreed to walk further: widen the radius (persisted to the DB) and retry.
+  const handleWalkFurther = async () => {
+    if (!tripId) return;
+    setIsExpandingRange(true);
+    try {
+      const res = await expandWalkingRange(tripId, WALK_FURTHER_STEP_KM);
+      setRangePrompt(null);
+      if (!res.changed) {
+        // Already at the maximum radius — treat as a genuine finish.
+        setTripFinished(true);
+        setCurrentActivity(null);
+        return;
+      }
+      await advanceToNextActivity();
+    } catch (err) {
+      console.error('[TripPage] Failed to expand walking range:', err);
+    } finally {
+      setIsExpandingRange(false);
+    }
+  };
+
+  // User declined to walk further: show the normal trip-complete summary.
+  const handleFinishTrip = () => {
+    setRangePrompt(null);
+    setTripFinished(true);
+    setCurrentActivity(null);
+  };
+
+  // Mark the current activity done and advance to the next one. The backend uses the
+  // arrival timestamp (from the geofence) to measure dwell time; when no explicit
+  // feedback is given it asks the LLM whether the user likely didn't enjoy it.
+  //
+  // If the like matches a popular trip, the backend returns a companion suggestion;
+  // we offer it before fetching the next activity (accept -> show it, dismiss -> normal next).
+  const finishActivity = async (feedback?: Activity['feedback'], notifyNext?: boolean) => {
+    if (!tripId || finishingRef.current) return;
+    finishingRef.current = true;
+
+    try {
+      const arrivedAt = arrivedAtRef.current;
+      let suggestion: CompanionSuggestion | null = null;
+
+      if (currentActivity) {
+        try {
+          suggestion = await completeActivity(tripId, currentActivity, { arrivedAt, feedback });
+        } catch (err) {
+          console.error('[TripPage] Failed to complete activity:', err);
+        }
+        // Use completed attraction's coords as new user position
+        if (currentActivity.lat != null && currentActivity.lng != null) {
+          setUserLocation({ lat: currentActivity.lat, lng: currentActivity.lng });
+        }
+        // Refresh history so the resulting feedback (explicit or auto-derived) is reflected.
+        try {
+          const completed = await fetchCompletedActivities(tripId);
+          setCompletedActivities(completed.map(toActivity));
+        } catch (err) {
+          console.error('[TripPage] Failed to refresh completed activities:', err);
+        }
+      }
+
+      // Reset arrival tracking for the next attraction.
+      arrivedAtRef.current = null;
+      setHasArrived(false);
+
+      // Offer the companion suggestion (if any) before advancing.
+      if (COMPANION_ENABLED && suggestion?.activity) {
+        setCompanionSuggestion(suggestion);
+        return;
+      }
+
+      await advanceToNextActivity(notifyNext);
+    } finally {
+      finishingRef.current = false;
+    }
+  };
+
+  // User accepted the "you might also like" suggestion: show it as the next activity.
+  const handleCompanionAccept = () => {
+    const suggestion = companionSuggestion;
+    setCompanionSuggestion(null);
+    if (!suggestion?.activity || !tripId) return;
+    setIsFoodIntercept(false);
+    setCurrentActivity(suggestion.activity);
+    sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(suggestion.activity));
+  };
+
+  // User dismissed the suggestion: continue with the normal recommendation flow.
+  const handleCompanionDismiss = async () => {
+    setCompanionSuggestion(null);
+    await advanceToNextActivity();
   };
 
   // Cycles through the cached food batch (next restaurant from the same engine call)
@@ -273,23 +353,14 @@ export function TripPage() {
   // User chose "Return" — go back to regular activities
   const handleReturnFromFood = async () => {
     if (!tripId) return;
-    setIsLoading(true);
     setFoodBatchExhausted(false);
-    try {
-      if (userLocation) {
-        await reportPosition(tripId, userLocation).catch(e =>
-          console.error('[TripPage] Failed to report return food position:', e)
-        );
-        sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(userLocation));
-      }
-      sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
-      const result = await fetchNextActivity(tripId);
-      applyActivityResult(result);
-    } catch (e) {
-      console.error('[TripPage] Failed to fetch next activity:', e);
-    } finally {
-      setIsLoading(false);
+    if (userLocation) {
+      await reportPosition(tripId, userLocation).catch(e =>
+        console.error('[TripPage] Failed to report return food position:', e)
+      );
+      sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(userLocation));
     }
+    await advanceToNextActivity();
   };
 
   // Dismiss food (starts cooldown) or skip regular activity, then fetch next
@@ -312,7 +383,7 @@ export function TripPage() {
       }
       sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
       const result = await fetchNextActivity(tripId);
-      applyActivityResult(result);
+      handleNextActivityResult(result);
     } catch (e) {
       console.error('[TripPage] Failed to fetch next activity:', e);
     } finally {
@@ -517,6 +588,14 @@ export function TripPage() {
               </div>
             </div>
           </div>
+        ) : rangePrompt && !tripFinished ? (
+          <WalkFurtherPrompt
+            maxWalkingDistance={rangePrompt.maxWalkingDistance}
+            stepKm={WALK_FURTHER_STEP_KM}
+            isExpanding={isExpandingRange}
+            onExpand={handleWalkFurther}
+            onFinish={handleFinishTrip}
+          />
         ) : (
           <div className="max-w-lg mx-auto space-y-6">
             <EmptyState
@@ -554,6 +633,15 @@ export function TripPage() {
           activity={currentActivity}
           onSubmit={handleFeedbackSubmit}
           onClose={() => setShowFeedback(false)}
+        />
+      )}
+
+      {/* Companion Suggestion Popup ("because you liked X...") */}
+      {companionSuggestion && (
+        <CompanionSuggestionPopup
+          suggestion={companionSuggestion}
+          onAccept={handleCompanionAccept}
+          onDismiss={handleCompanionDismiss}
         />
       )}
 

@@ -66,6 +66,11 @@ export interface NextActivityResponse {
   userLocation: { lat: number; lng: number } | null;
   card_type?: 'food_intercept' | 'regular';
   intercept_metadata?: InterceptMetadata;
+  // True when the engine returned nothing within the current walking radius
+  // (as opposed to the trip being genuinely finished).
+  outOfRange?: boolean;
+  // The trip's current max walking distance (km), echoed on an out-of-range result.
+  maxWalkingDistance?: number | null;
 }
 
 export const defaultPreferences: TripPreferences = {
