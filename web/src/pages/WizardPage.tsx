@@ -181,6 +181,7 @@ export default function WizardPage() {
   const canProceed = () => {
     if (wizardStep === 1) {
       if (!tripSetup.startDate || !tripSetup.endDate || !localDestination) return false;
+      if (tripSetup.startDate.getTime() < startOfDay(new Date()).getTime()) return false;
       // Start date must be on or before end date
       return tripSetup.startDate.getTime() <= tripSetup.endDate.getTime();
     }
@@ -190,6 +191,13 @@ export default function WizardPage() {
   const visiblePreferenceItems = preferenceItems.filter(
     (item) => item.key !== 'pace' || featureFlags.wizard.showTripPace,
   );
+
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+
+  const hasPastStartDate =
+    wizardStep === 1 &&
+    tripSetup.startDate &&
+    tripSetup.startDate.getTime() < startOfDay(new Date()).getTime();
 
   const hasInvalidDateRange =
     wizardStep === 1 &&
@@ -267,6 +275,7 @@ export default function WizardPage() {
                   <input
                     ref={startDateRef}
                     type="date"
+                    min={todayStr}
                     value={tripSetup.startDate ? format(tripSetup.startDate, 'yyyy-MM-dd') : ''}
                     onChange={(e) => handleDateChange('startDate', e.target.value)}
                     className="block h-12 w-full max-w-full min-w-0 appearance-none rounded-xl border-2 border-input bg-card px-4 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:border-primary transition-all duration-200 [&::-webkit-date-and-time-value]:text-left [&::-webkit-date-and-time-value]:min-h-[1.5em]"
@@ -277,13 +286,19 @@ export default function WizardPage() {
                   <input
                     ref={endDateRef}
                     type="date"
+                    min={todayStr}
                     value={tripSetup.endDate ? format(tripSetup.endDate, 'yyyy-MM-dd') : ''}
                     onChange={(e) => handleDateChange('endDate', e.target.value)}
                     className="block h-12 w-full max-w-full min-w-0 appearance-none rounded-xl border-2 border-input bg-card px-4 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:border-primary transition-all duration-200 [&::-webkit-date-and-time-value]:text-left [&::-webkit-date-and-time-value]:min-h-[1.5em]"
                   />
                 </div>
               </div>
-              {hasInvalidDateRange && (
+              {hasPastStartDate && (
+                <p className="mt-3 px-5 text-sm text-destructive font-medium">
+                  Start date can't be in the past — pick a date from today onward.
+                </p>
+              )}
+              {!hasPastStartDate && hasInvalidDateRange && (
                 <p className="mt-3 px-5 text-sm text-destructive font-medium">
                   End date must be on or after the start date.
                 </p>
@@ -466,7 +481,7 @@ export default function WizardPage() {
               <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-4">
                 <p className="text-sm font-medium text-destructive">Could not save trip</p>
                 <p className="mt-1 text-sm text-muted-foreground">{saveError}</p>
-                {!saveError.toLowerCase().includes('overlap') && (
+                {(saveError.includes('(status') || saveError.toLowerCase().includes('failed to fetch')) && (
                   <p className="mt-2 text-xs text-muted-foreground">
                     Check that the API is running (e.g. npm run dev in api/) and the database is set up (see database/README.md).
                   </p>
