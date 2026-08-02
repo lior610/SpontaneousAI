@@ -6,7 +6,7 @@ import { API_BASE } from '@/config';
 import { 
   Calendar, MapPin, ArrowRight, ArrowLeft, Check,
   UtensilsCrossed, TreePine, Theater, PartyPopper, 
-  DollarSign, Gauge, Footprints, Car, Train
+  DollarSign, Gauge, Footprints
 } from 'lucide-react';
 import { StepIndicator } from '@/components/StepIndicator';
 import { TripSetup, TripPreferences, TripConstraints, defaultTripSetup } from '@/types/trip';
@@ -23,12 +23,6 @@ const preferenceItems = [
   { key: 'budget', icon: DollarSign, label: 'Budget Level', emoji: '💰' },
   { key: 'pace', icon: Gauge, label: 'Trip Pace', emoji: '⚡' },
 ];
-
-const transportOptions = [
-  { value: 'walking', icon: Footprints, label: 'Walking' },
-  { value: 'public', icon: Train, label: 'Public Transit' },
-  { value: 'taxi', icon: Car, label: 'Taxi/Ride-share' },
-] as const;
 
 /** Trip is "current" if today falls within [start, end] (local calendar dates). Otherwise manage on /trips. */
 function isActiveTripNow(startDate: Date, endDate: Date): boolean {
@@ -371,31 +365,6 @@ export default function WizardPage() {
                 />
               </div>
             </div>
-
-            {/* Transport Type */}
-            <div className="rounded-xl border bg-card shadow-card hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-              <div className="p-5 pb-2">
-                <h3 className="text-base font-bold">Preferred Transportation</h3>
-              </div>
-              <div className="p-5 pt-0">
-                <div className="grid grid-cols-3 gap-3">
-                  {transportOptions.map(({ value, icon: Icon, label }) => (
-                    <button
-                      key={value}
-                      onClick={() => updateConstraints({ transportType: value })}
-                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-200 ${
-                        tripSetup.constraints.transportType === value
-                          ? 'border-primary bg-primary/10 text-primary'
-                          : 'border-border hover:border-primary/30'
-                      }`}
-                    >
-                      <Icon className="w-6 h-6" />
-                      <span className="text-xs font-medium">{label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
@@ -445,12 +414,10 @@ export default function WizardPage() {
                 </div>
 
                 <div className="flex items-center gap-3 p-3 bg-card rounded-lg">
-                  {tripSetup.constraints.transportType === 'walking' && <Footprints className="w-5 h-5 text-accent" />}
-                  {tripSetup.constraints.transportType === 'public' && <Train className="w-5 h-5 text-accent" />}
-                  {tripSetup.constraints.transportType === 'taxi' && <Car className="w-5 h-5 text-accent" />}
+                  <Footprints className="w-5 h-5 text-accent" />
                   <div>
                     <p className="text-xs text-muted-foreground">Transportation</p>
-                    <p className="font-semibold capitalize">{tripSetup.constraints.transportType}</p>
+                    <p className="font-semibold capitalize">Walking</p>
                   </div>
                 </div>
               </div>
