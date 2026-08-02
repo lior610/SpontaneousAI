@@ -6,6 +6,7 @@ import { TripsPage } from "./pages/TripsPage";
 import { PastTripSummaryPage } from "./pages/PastTripSummaryPage";
 import WizardPage from "./pages/WizardPage";
 import { LoginPage } from "./pages/LoginPage";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { NotFound } from "./pages/NotFound";
 
 import { NotificationProvider } from "./components/NotificationProvider";
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/trip" element={<TripPage />} />
         <Route path="/wizard" element={<WizardPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       <DevToolsPanel />
