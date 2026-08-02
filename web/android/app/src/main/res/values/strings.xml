@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Spontaneous AI</string>
+    <string name="title_activity_main">Spontaneous AI</string>
+    <string name="package_name">com.spontaneousai.app</string>
+    <string name="custom_url_scheme">com.spontaneousai.app</string>
+</resources>
