@@ -1,7 +1,7 @@
-import { ThumbsUp, Ban, ArrowRight } from 'lucide-react';
+import { ThumbsUp, ArrowRight } from 'lucide-react';
 import { Activity } from '@/types/trip';
 
-export type FeedbackChoice = 'liked' | 'skipped' | 'next';
+export type FeedbackChoice = 'liked' | 'next';
 
 interface FeedbackPopupProps {
   activity: Activity;
@@ -32,17 +32,6 @@ export function FeedbackPopup({ activity, onSubmit, onClose }: FeedbackPopupProp
             >
               <ThumbsUp className="w-5 h-5" />
               Liked it
-            </button>
-
-            <button
-              onClick={() => onSubmit('skipped')}
-              className="inline-flex items-center gap-3 w-full h-12 px-4 rounded-lg text-sm font-semibold border-2 border-destructive/40 text-destructive bg-transparent hover:bg-destructive/10 transition-all duration-300"
-            >
-              <Ban className="w-5 h-5" />
-              Skip
-              <span className="ml-auto text-xs font-normal text-muted-foreground">
-                Show me fewer like this
-              </span>
             </button>
 
             <button

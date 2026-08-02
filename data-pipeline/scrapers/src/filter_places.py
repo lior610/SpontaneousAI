@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -87,28 +88,46 @@ def extract_unique_categories(input_file):
     return output_data
 
 # Filter category helper functions
+def _compile_keyword_pattern(keywords):
+    # Match any keyword as a whole word/phrase, case-insensitive.
+    # \b ensures "Market" no longer matches inside "Supermarket".
+    alternation = "|".join(re.escape(k) for k in keywords)
+    return re.compile(rf"\b(?:{alternation})\b", re.IGNORECASE)
+
+_ATTRACTION_RE = _compile_keyword_pattern(ATTRACTION_KEYWORDS)
+_UTILITY_RE = _compile_keyword_pattern(UTILITY_KEYWORDS)
+
 def is_attraction(cat_name):
-    for keyword in ATTRACTION_KEYWORDS:
-        if keyword.lower() in cat_name.lower():
-            return True
-    return False
+    return bool(_ATTRACTION_RE.search(cat_name))
 
 def is_utility(cat_name):
-    for keyword in UTILITY_KEYWORDS:
-        if keyword.lower() in cat_name.lower():
-            return True
-    return False
+    return bool(_UTILITY_RE.search(cat_name))
 
 def classify_category(category):
-    """Classify category as 'attraction' or 'utility'."""
+    """Classify category as 'utility' or 'attraction'."""
     
-    # Check if it's an ATTRACTION first (takes priority)
-    if is_attraction(category):
-        return 'attraction'
-    
-    # Then check if it's a utility
-    elif is_utility(category):
+    # Check if it's a UTILITY first (takes priority)
+    if is_utility(category):
         return 'utility'
+    
+    # Then check if it's an attraction
+    elif is_attraction(category):
+        return 'attraction'
+    return None
+
+def classify_place(categories):
+    """Classify a place from its list of categories.
+
+    Utility takes priority: if any category is a utility (pharmacy, grocery,
+    supermarket, convenience, etc.) the place is a utility even when it also
+    carries an attraction category. Otherwise it's an attraction.
+    """
+    if not categories:
+        return None
+    if any(is_utility(c) for c in categories):
+        return 'utility'
+    if any(is_attraction(c) for c in categories):
+        return 'attraction'
     return None
 
 def filter_categories(categories):
@@ -165,11 +184,11 @@ def filter_places(places_file, attractions_cats, utilities_cats):
         # Check if any category exists in our filtered lists
         matched_type = None
         for category in place_categories:
-            if category in attractions_set:
-                matched_type = 'attraction'
-                break  # Prefer attraction if multiple categories
-            elif category in utilities_set:
+            if category in utilities_set:
                 matched_type = 'utility'
+                break  # Prefer utility if multiple categories
+            elif category in attractions_set:
+                matched_type = 'attraction'
         
         # Only include places that have at least one valid category
         if matched_type:
