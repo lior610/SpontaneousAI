@@ -191,6 +191,86 @@ def test_picks_highest_similarity_persona_among_candidates(monkeypatch):
     assert result["persona_slug"] == "matched-persona"
 
 
+def test_falls_back_to_next_matching_trip(monkeypatch):
+    # Two above-threshold trips contain the liked place. The higher-similarity
+    # trip (id 30) has only an unreachable stop; the service must fall through
+    # to the next matching trip (id 40) instead of giving up.
+    aligned_ish = np.array([1.0, 0.3, 0.0, 0.0], dtype=np.float32)  # cosine ~0.958
+    _install(monkeypatch, popular_trips=[
+        {
+            "popular_trip_id": 30,
+            "persona_id": 1,
+            "persona_slug": "best-persona",
+            "persona_name": "Best Persona",
+            "persona_embedding": PERSONA_ALIGNED,   # cosine 1.0 -> tried first
+        },
+        {
+            "popular_trip_id": 40,
+            "persona_id": 2,
+            "persona_slug": "second-persona",
+            "persona_name": "Second Persona",
+            "persona_embedding": aligned_ish,       # above threshold -> tried second
+        },
+    ])
+
+    stops_by_trip = {
+        30: [_stop(FAR_ID, FAR_LAT, FAR_LNG, 0)],           # unreachable only
+        40: [_stop(NEAR_ID, NEAR_LAT, NEAR_LNG, 0)],        # reachable
+    }
+    monkeypatch.setattr(
+        cs, "get_trip_candidate_stops",
+        lambda conn, popular_trip_id, exclude_place_ids: [
+            s for s in stops_by_trip[popular_trip_id]
+            if s["place_id"] not in set(exclude_place_ids)
+        ],
+    )
+
+    service = CompanionSuggestionService()
+    result = service.suggest(1, 1, LIKED_ID)
+    assert result is not None
+    assert result["popular_trip_id"] == 40
+    assert result["place_id"] == NEAR_ID
+
+
+def test_falls_back_when_best_trip_fully_seen(monkeypatch):
+    # The best trip's stops are all already seen; the second matching trip
+    # still has an unseen reachable stop and must be used.
+    _install(monkeypatch, excluded={SEEN_ID}, popular_trips=[
+        {
+            "popular_trip_id": 50,
+            "persona_id": 1,
+            "persona_slug": "best-persona",
+            "persona_name": "Best Persona",
+            "persona_embedding": PERSONA_ALIGNED,
+        },
+        {
+            "popular_trip_id": 60,
+            "persona_id": 2,
+            "persona_slug": "second-persona",
+            "persona_name": "Second Persona",
+            "persona_embedding": PERSONA_ALIGNED,
+        },
+    ])
+
+    stops_by_trip = {
+        50: [_stop(SEEN_ID, NEAR_LAT, NEAR_LNG, 0)],        # excluded -> empty
+        60: [_stop(NEAR_ID, NEAR_LAT, NEAR_LNG, 0)],
+    }
+    monkeypatch.setattr(
+        cs, "get_trip_candidate_stops",
+        lambda conn, popular_trip_id, exclude_place_ids: [
+            s for s in stops_by_trip[popular_trip_id]
+            if s["place_id"] not in set(exclude_place_ids)
+        ],
+    )
+
+    service = CompanionSuggestionService()
+    result = service.suggest(1, 1, LIKED_ID)
+    assert result is not None
+    assert result["popular_trip_id"] == 60
+    assert result["place_id"] == NEAR_ID
+
+
 def test_per_trip_cap(monkeypatch):
     _install(monkeypatch)
     monkeypatch.setattr(cs, "COOLDOWN_LIKES", 0)  # disable cooldown to isolate the cap

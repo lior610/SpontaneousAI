@@ -17,7 +17,7 @@ attraction's coordinates). If no stop qualifies, no suggestion is returned.
 import os
 import sys
 import logging
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
 
 import numpy as np
@@ -35,6 +35,7 @@ from src.db.preference_queries import get_current_embedding
 from src.db.feedback_queries import get_excluded_place_ids
 from src.db.user_queries import get_trip
 from src.db.popular_trip_queries import (
+    get_all_personas,
     get_popular_trips_for_place,
     get_trip_candidate_stops,
     get_attraction_summary,
@@ -98,6 +99,11 @@ class CompanionSuggestionService:
 
     def _suggest(self, user_id: int, trip_id: int, liked_place_id: str) -> Optional[Dict[str, Any]]:
         if self._is_rate_limited(trip_id):
+            logger.info(
+                f"[Companion] trip {trip_id}: rate-limited "
+                f"(shown {self._shown_count.get(trip_id, 0)}/{MAX_PER_TRIP}, "
+                f"likes since last {self._likes_since_shown.get(trip_id)}, cooldown {COOLDOWN_LIKES})"
+            )
             return None
 
         # 1. Load user preference vector, trip context, and seen places (users DB).
@@ -107,46 +113,216 @@ class CompanionSuggestionService:
             excluded = get_excluded_place_ids(users_conn, trip_id)
 
         if pref_vec is None or trip is None:
+            logger.info(
+                f"[Companion] trip {trip_id}: missing "
+                f"{'preference vector' if pref_vec is None else 'trip row'} — no suggestion"
+            )
             return None
 
-        # 2. Popular trips containing the liked attraction + best persona match (attractions DB).
+        # 2. Popular trips containing the liked attraction, ranked by persona match (attractions DB).
         with get_attr_conn() as attr_conn:
             candidate_trips = get_popular_trips_for_place(attr_conn, liked_place_id)
             if not candidate_trips:
+                logger.info(
+                    f"[Companion] trip {trip_id}: liked place {liked_place_id} "
+                    f"is not in any popular trip — no suggestion"
+                )
                 return None
 
-            best, best_sim = self._best_persona_match(candidate_trips, pref_vec)
-            if best is None:
+            matching = self._matching_trips(candidate_trips, pref_vec, trip_id)
+            if not matching:
                 return None
 
-            # 3. Candidate stops from the matched trip, excluding seen + liked.
-            exclude_ids = set(excluded)
-            exclude_ids.add(liked_place_id)
-            stops = get_trip_candidate_stops(attr_conn, best["popular_trip_id"], list(exclude_ids))
-            if not stops:
-                return None
-
-            # 4. MANDATORY reachability, relative to live position or the liked place.
+            # 3+4. Try every above-threshold trip in similarity order: the first
+            # one with an unseen, reachable stop wins. Falling through to the
+            # next matching trip costs nothing in relevance (all passed the
+            # threshold) and fires suggestions the single-best approach missed.
             liked_summary = get_attraction_summary(attr_conn, liked_place_id)
             ref_lat, ref_lng = self._reference_position(trip, liked_summary)
             max_walk_km = self._max_walk_km(trip)
+            exclude_ids = set(excluded)
+            exclude_ids.add(liked_place_id)
+
+            for pt, sim in matching:
+                stops = get_trip_candidate_stops(attr_conn, pt["popular_trip_id"], list(exclude_ids))
+                if not stops:
+                    logger.info(
+                        f"[Companion] trip {trip_id}: popular trip {pt['popular_trip_id']} "
+                        f"({pt.get('persona_slug')}, sim {sim:.3f}) has no unseen stops left — trying next"
+                    )
+                    continue
+
+                chosen = self._pick_reachable_stop(stops, ref_lat, ref_lng, max_walk_km)
+                if chosen is None:
+                    logger.info(
+                        f"[Companion] trip {trip_id}: {len(stops)} unseen stop(s) on popular trip "
+                        f"{pt['popular_trip_id']} but none within {max_walk_km} km — trying next"
+                    )
+                    continue
+
+                liked_name = (liked_summary or {}).get("name") or "that spot"
+                logger.info(
+                    f"[Companion] trip {trip_id}: suggesting {chosen.get('name')} "
+                    f"({chosen.get('place_id')}) from popular trip {pt['popular_trip_id']} "
+                    f"({pt.get('persona_slug')}, sim {sim:.3f}, {chosen.get('_distance_km')} km)"
+                )
+                return self._build_suggestion(chosen, pt, sim, liked_name)
+
+            logger.info(
+                f"[Companion] trip {trip_id}: exhausted all {len(matching)} matching "
+                f"popular trip(s) without a reachable unseen stop — no suggestion"
+            )
+            return None
+
+    def _matching_trips(self, candidate_trips, pref_vec, trip_id=None) -> List[Tuple[Dict[str, Any], float]]:
+        """All candidate trips at/above the similarity threshold, best first."""
+        matching = []
+        sims = []
+        for ct in candidate_trips:
+            sim = _cosine(pref_vec, ct["persona_embedding"])
+            sims.append(f"{ct.get('persona_slug')}={sim:.3f}")
+            if sim >= SIM_THRESHOLD:
+                matching.append((ct, sim))
+        if not matching:
+            logger.info(
+                f"[Companion] trip {trip_id}: no persona above threshold {SIM_THRESHOLD} "
+                f"({', '.join(sims)})"
+            )
+        matching.sort(key=lambda pair: pair[1], reverse=True)
+        return matching
+
+    def debug_affinity(self, trip_id: int, liked_place_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Diagnostic snapshot for the companion flow (never called on the hot path).
+
+        Returns the cosine similarity between the trip's current preference vector
+        and EVERY persona, plus the anti-nag state. If `liked_place_id` is given,
+        also simulates a like on that place step by step (which popular trips
+        contain it, per-trip similarity, unseen stops, reachability) WITHOUT
+        mutating any rate-limit state.
+        """
+        with get_users_conn() as users_conn:
+            pref_vec = get_current_embedding(users_conn, trip_id)
+            trip = get_trip(users_conn, trip_id)
+            excluded = get_excluded_place_ids(users_conn, trip_id)
+
+        result: Dict[str, Any] = {
+            "trip_id": trip_id,
+            "sim_threshold": SIM_THRESHOLD,
+            "has_preference_vector": pref_vec is not None,
+            "rate_limit": {
+                "shown_count": self._shown_count.get(trip_id, 0),
+                "max_per_trip": MAX_PER_TRIP,
+                "likes_since_last_shown": self._likes_since_shown.get(trip_id),
+                "cooldown_likes": COOLDOWN_LIKES,
+                "currently_rate_limited": self._is_rate_limited(trip_id),
+            },
+            "personas": [],
+        }
+        if pref_vec is None:
+            return result
+
+        with get_attr_conn() as attr_conn:
+            personas = get_all_personas(attr_conn)
+            scored = []
+            for p in personas:
+                sim = _cosine(pref_vec, p["embedding"])
+                scored.append({
+                    "slug": p["slug"],
+                    "name": p["name"],
+                    "similarity": round(sim, 4),
+                    "passes_threshold": sim >= SIM_THRESHOLD,
+                    "gap_to_threshold": round(SIM_THRESHOLD - sim, 4) if sim < SIM_THRESHOLD else 0.0,
+                })
+            result["personas"] = sorted(scored, key=lambda s: s["similarity"], reverse=True)
+
+            if liked_place_id:
+                result["simulation"] = self._debug_simulate_like(
+                    attr_conn, trip, pref_vec, excluded, liked_place_id
+                )
+        return result
+
+    def _debug_simulate_like(self, attr_conn, trip, pref_vec, excluded, liked_place_id) -> Dict[str, Any]:
+        """Dry-run of _suggest for one place_id, reporting why each step passed/failed."""
+        sim_report: Dict[str, Any] = {"liked_place_id": liked_place_id}
+
+        candidate_trips = get_popular_trips_for_place(attr_conn, liked_place_id)
+        sim_report["popular_trips_containing_place"] = [
+            {
+                "popular_trip_id": ct["popular_trip_id"],
+                "persona_slug": ct.get("persona_slug"),
+                "similarity": round(_cosine(pref_vec, ct["persona_embedding"]), 4),
+                "passes_threshold": _cosine(pref_vec, ct["persona_embedding"]) >= SIM_THRESHOLD,
+            }
+            for ct in candidate_trips
+        ]
+        if not candidate_trips:
+            sim_report["outcome"] = "place is not part of any popular trip"
+            return sim_report
+
+        matching = self._matching_trips(candidate_trips, pref_vec)
+        if not matching:
+            sim_report["outcome"] = f"no containing trip's persona reaches threshold {SIM_THRESHOLD}"
+            return sim_report
+
+        liked_summary = get_attraction_summary(attr_conn, liked_place_id)
+        ref_lat, ref_lng = self._reference_position(trip, liked_summary)
+        max_walk_km = self._max_walk_km(trip)
+        sim_report["reference_position"] = {"lat": ref_lat, "lng": ref_lng}
+        sim_report["max_walk_km"] = max_walk_km
+
+        exclude_ids = set(excluded)
+        exclude_ids.add(liked_place_id)
+
+        # Mirror _suggest: walk the matching trips best-first and report each
+        # attempt, so the debug output shows exactly where the fallback landed.
+        attempts = []
+        outcome = None
+        for pt, sim in matching:
+            attempt: Dict[str, Any] = {
+                "popular_trip_id": pt["popular_trip_id"],
+                "persona_slug": pt.get("persona_slug"),
+                "similarity": round(sim, 4),
+            }
+            stops = get_trip_candidate_stops(attr_conn, pt["popular_trip_id"], list(exclude_ids))
+            if not stops:
+                attempt["result"] = "no unseen stops left"
+                attempts.append(attempt)
+                continue
+
+            stop_report = []
+            for stop in stops:
+                lat, lng = stop.get("latitude"), stop.get("longitude")
+                dist = (
+                    round(haversine(ref_lat, ref_lng, float(lat), float(lng)), 2)
+                    if None not in (ref_lat, ref_lng, lat, lng)
+                    else None
+                )
+                stop_report.append({
+                    "place_id": stop["place_id"],
+                    "name": stop["name"],
+                    "position": stop.get("position"),
+                    "distance_km": dist,
+                    "reachable": dist is not None and dist <= max_walk_km,
+                })
+            attempt["unseen_stops"] = stop_report
 
             chosen = self._pick_reachable_stop(stops, ref_lat, ref_lng, max_walk_km)
             if chosen is None:
-                return None
+                attempt["result"] = f"no unseen stop within {max_walk_km} km"
+                attempts.append(attempt)
+                continue
 
-            liked_name = (liked_summary or {}).get("name") or "that spot"
-            return self._build_suggestion(chosen, best, best_sim, liked_name)
+            attempt["result"] = f"would suggest {chosen['name']} ({chosen['place_id']})"
+            attempts.append(attempt)
+            outcome = attempt["result"]
+            break
 
-    def _best_persona_match(self, candidate_trips, pref_vec) -> Tuple[Optional[Dict[str, Any]], float]:
-        best = None
-        best_sim = -1.0
-        for ct in candidate_trips:
-            sim = _cosine(pref_vec, ct["persona_embedding"])
-            if sim >= SIM_THRESHOLD and sim > best_sim:
-                best_sim = sim
-                best = ct
-        return best, best_sim
+        sim_report["attempts"] = attempts
+        sim_report["outcome"] = outcome or (
+            f"exhausted all {len(matching)} matching trip(s) without a reachable unseen stop"
+        )
+        return sim_report
 
     def _reference_position(self, trip: Dict[str, Any], liked_summary: Optional[Dict[str, Any]]):
         """User's live position; fall back to the liked attraction's coordinates."""

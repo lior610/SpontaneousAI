@@ -14,19 +14,25 @@ embeddings (of the persona description) are the match vector against a user's
 preference vector.
 
 Idempotent per location: existing popular_trips for a location are deleted and
-regenerated on each run.
+regenerated on each run — UNLESS POPULAR_TRIPS_FILL_MISSING is set, in which
+case nothing is deleted and only personas with fewer than
+POPULAR_TRIPS_PER_PERSONA trips are topped up (useful when a single Gemini call
+failed or returned invalid routes and left a persona short).
 
 Usage:
     python data-pipeline/scripts/generate_popular_trips.py
     LOCATION_SLUG=london python data-pipeline/scripts/generate_popular_trips.py
+    POPULAR_TRIPS_FILL_MISSING=1 python data-pipeline/scripts/generate_popular_trips.py
 
 Env vars:
     GEMINI_API_KEY              - required; Google Gemini API key
     GEMINI_MODEL               - default: gemini-2.5-flash
-    POPULAR_TRIPS_PER_PERSONA  - default: 5
+    POPULAR_TRIPS_PER_PERSONA  - default: 10
     POPULAR_TRIP_MIN_STOPS     - default: 4
     POPULAR_TRIP_MAX_STOPS     - default: 6
     POPULAR_TRIPS_CATALOG_LIMIT- default: 150 (max attractions offered to the LLM per city)
+    POPULAR_TRIPS_FILL_MISSING - optional; 1/true = top-up mode (no delete, only
+                                 personas below the per-persona target)
     LOCATION_SLUG              - optional; restrict generation to one location
     POSTGRES_*                 - DB connection (see load_places_to_db.py)
 
@@ -66,10 +72,11 @@ logger = logging.getLogger(__name__)
 EMBEDDING_DIM = 384  # all-MiniLM-L6-v2
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-TRIPS_PER_PERSONA = int(os.getenv("POPULAR_TRIPS_PER_PERSONA", "5"))
+TRIPS_PER_PERSONA = int(os.getenv("POPULAR_TRIPS_PER_PERSONA", "10"))
 MIN_STOPS = int(os.getenv("POPULAR_TRIP_MIN_STOPS", "4"))
 MAX_STOPS = int(os.getenv("POPULAR_TRIP_MAX_STOPS", "6"))
 CATALOG_LIMIT = int(os.getenv("POPULAR_TRIPS_CATALOG_LIMIT", "150"))
+FILL_MISSING = os.getenv("POPULAR_TRIPS_FILL_MISSING", "").strip().lower() in ("1", "true", "yes")
 
 
 def get_db_config() -> dict:
@@ -190,19 +197,33 @@ def get_member_embeddings(conn, place_ids: List[str]) -> Dict[str, np.ndarray]:
 # LLM generation
 # ---------------------------------------------------------------------------
 
-def build_prompt(persona: Dict[str, str], city_name: str, catalog: List[Dict[str, Any]]) -> str:
+def build_prompt(
+    persona: Dict[str, str],
+    city_name: str,
+    catalog: List[Dict[str, Any]],
+    n_trips: int,
+    existing_names: Optional[List[str]] = None,
+) -> str:
     lines = [
         f"{i + 1}. [{a['place_id']}] {a['name']} ({a['categories']})"
         for i, a in enumerate(catalog)
     ]
     catalog_block = "\n".join(lines)
+    avoid_block = ""
+    if existing_names:
+        names = "\n".join(f"- {n}" for n in existing_names)
+        avoid_block = (
+            f"\nThe following routes already exist for this persona; make the new "
+            f"routes clearly different from them:\n{names}\n"
+        )
     return (
         f"You are a local travel expert for {city_name}.\n\n"
         f"Traveler persona: {persona['name']}. {persona['description']}\n\n"
         f"Below is the ONLY list of real attractions you may use. Each line is "
         f"\"[place_id] Name (categories)\".\n\n"
-        f"{catalog_block}\n\n"
-        f"Compose {TRIPS_PER_PERSONA} distinct popular day-trip routes that this persona "
+        f"{catalog_block}\n"
+        f"{avoid_block}\n"
+        f"Compose {n_trips} distinct popular day-trip routes that this persona "
         f"would love. Each route must be an ordered sequence of {MIN_STOPS} to {MAX_STOPS} "
         f"attractions chosen strictly from the list above, using the exact place_id values. "
         f"Do not invent place_ids. Avoid repeating the same attraction within a route.\n\n"
@@ -286,6 +307,16 @@ def clear_location_trips(conn, location_id: int) -> None:
     conn.commit()
 
 
+def get_existing_trip_names(conn, location_id: int, persona_id: int) -> List[str]:
+    """Names of trips already stored for this (location, persona) pair."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT name FROM popular_trips WHERE location_id = %s AND persona_id = %s ORDER BY id",
+            (location_id, persona_id),
+        )
+        return [row[0] for row in cur.fetchall()]
+
+
 def insert_trip(conn, location_id: int, persona_id: int, trip: Dict[str, Any],
                 member_embeddings: Dict[str, np.ndarray]) -> bool:
     embs = [member_embeddings[pid] for pid in trip["place_ids"] if pid in member_embeddings]
@@ -351,11 +382,31 @@ def main():
             catalog_ids = {a["place_id"] for a in catalog}
             logger.info(f"Location '{loc['name']}' ({loc['slug']}): {len(catalog)} attractions offered to LLM")
 
-            clear_location_trips(conn, loc["id"])
+            if FILL_MISSING:
+                logger.info("Fill-missing mode: keeping existing trips, topping up short personas")
+            else:
+                clear_location_trips(conn, loc["id"])
 
             for persona in PERSONAS:
                 persona_id = slug_to_persona_id[persona["slug"]]
-                prompt = build_prompt(persona, loc["name"], catalog)
+
+                existing_names: List[str] = []
+                n_trips = TRIPS_PER_PERSONA
+                if FILL_MISSING:
+                    existing_names = get_existing_trip_names(conn, loc["id"], persona_id)
+                    n_trips = TRIPS_PER_PERSONA - len(existing_names)
+                    if n_trips <= 0:
+                        logger.info(
+                            f"  persona '{persona['slug']}': already has "
+                            f"{len(existing_names)}/{TRIPS_PER_PERSONA} trips; skipping"
+                        )
+                        continue
+                    logger.info(
+                        f"  persona '{persona['slug']}': has {len(existing_names)}, "
+                        f"requesting {n_trips} more"
+                    )
+
+                prompt = build_prompt(persona, loc["name"], catalog, n_trips, existing_names)
                 result = call_gemini(prompt)
                 if not result or "trips" not in result:
                     logger.warning(f"No trips returned for persona '{persona['slug']}' in '{loc['slug']}'")
@@ -366,6 +417,9 @@ def main():
                     validated = validate_trip(raw_trip, catalog_ids)
                     if validated:
                         valid_trips.append(validated)
+                # In fill mode never exceed the per-persona target, even if the
+                # LLM returned more routes than asked for.
+                valid_trips = valid_trips[:n_trips]
 
                 all_ids = [pid for t in valid_trips for pid in t["place_ids"]]
                 member_embeddings = get_member_embeddings(conn, all_ids)

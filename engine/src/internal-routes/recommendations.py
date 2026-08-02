@@ -3,7 +3,7 @@ Recommendations Router - API endpoints for receiving recommendations and posting
 """
 import logging
 import random
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends
 try:
     from zoneinfo import ZoneInfo
@@ -179,6 +179,23 @@ async def get_recommendations(req: RecommendationRequest):
         
     except Exception as e:
         logger.exception("Failed to get recommendations")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/companion-debug/{trip_id}")
+async def companion_debug(trip_id: int, place_id: Optional[str] = None):
+    """
+    Diagnostics for the companion-suggestion flow.
+
+    Returns the cosine similarity between the trip's current preference vector
+    and every persona (sorted), plus anti-nag/rate-limit state. Pass
+    ?place_id=... to dry-run a like on that attraction and see exactly why a
+    suggestion would or wouldn't fire (no state is mutated).
+    """
+    try:
+        return companion_service.debug_affinity(trip_id, place_id)
+    except Exception as e:
+        logger.exception("Companion debug failed")
         raise HTTPException(status_code=500, detail=str(e))
 
 

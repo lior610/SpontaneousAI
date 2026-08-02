@@ -23,6 +23,29 @@ def _parse_embedding(emb) -> np.ndarray:
     return np.array(list(emb), dtype=np.float32)
 
 
+def get_all_personas(conn) -> List[Dict[str, Any]]:
+    """
+    Return every persona with its embedding.
+
+    Used by the companion-debug endpoint to show how close a trip's preference
+    vector is to each persona, regardless of which popular trips exist.
+    """
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, slug, name, description, embedding FROM personas ORDER BY id")
+    rows = cursor.fetchall()
+    cursor.close()
+    return [
+        {
+            "persona_id": row[0],
+            "slug": row[1],
+            "name": row[2],
+            "description": row[3],
+            "embedding": _parse_embedding(row[4]),
+        }
+        for row in rows
+    ]
+
+
 def get_popular_trips_for_place(conn, place_id: str) -> List[Dict[str, Any]]:
     """
     Return every popular trip that contains `place_id`, with its persona.

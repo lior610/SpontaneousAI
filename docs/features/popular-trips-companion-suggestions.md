@@ -11,9 +11,9 @@ offers another (unseen, reachable) stop from that same popular trip.
   (8 personas). Each `description` is embedded (all-MiniLM-L6-v2, 384d) and stored in
   `personas.embedding` — this is the **match vector**.
 - `data-pipeline/scripts/generate_popular_trips.py` asks Google Gemini, per city and
-  per persona, to compose `POPULAR_TRIPS_PER_PERSONA` (default 5) ordered routes of
+  per persona, to compose `POPULAR_TRIPS_PER_PERSONA` (default 10) ordered routes of
   4-6 stops using ONLY the city's real attractions. Returned `place_id`s are validated
-  against the DB catalog (hallucinations dropped). Volume: ~8 x 5 = 40 trips per city.
+  against the DB catalog (hallucinations dropped). Volume: ~8 x 10 = 80 trips per city.
 - Persisted permanently in the `attractions` DB: `personas`, `popular_trips`,
   `popular_trip_attractions` (see `database/init.sql` and
   `database/migrations/002_popular_trips.sql`). Separate from the ephemeral Node
@@ -25,10 +25,12 @@ Reuses the existing like path. When `POST /recommendations/feedback` receives a
 (`engine/src/services/companion_service.py`):
 1. finds popular trips containing the liked `place_id` (index `idx_pta_place`);
 2. keeps trips whose persona embedding has cosine >= `COMPANION_SIM_THRESHOLD` (0.45)
-   with the user's current preference vector; picks the best;
-3. selects the first **unseen** stop (excludes `trip_feedback` + the liked one) that is
-   **within walking distance** — reachability is MANDATORY (measured from the trip's live
-   position, falling back to the liked attraction's coords). If none qualify -> no suggestion.
+   with the user's current preference vector, sorted best-first;
+3. tries each matching trip in similarity order: picks the first **unseen** stop
+   (excludes `trip_feedback` + the liked one) that is **within walking distance** —
+   reachability is MANDATORY (measured from the trip's live position, falling back to
+   the liked attraction's coords). If a trip has no qualifying stop, the next matching
+   trip is tried; only when ALL matching trips are exhausted -> no suggestion.
 
 The suggestion rides back in the feedback response as `companion_suggestion`. The Node
 controller (`completeTripActivity`) maps it to the frontend `Activity` shape (shared
@@ -43,14 +45,29 @@ controller (`completeTripActivity`) maps it to the frontend `Activity` shape (sh
 ## Config
 - Engine: `COMPANION_SIM_THRESHOLD=0.45`, `COMPANION_MAX_PER_TRIP=3`,
   `COMPANION_COOLDOWN_LIKES=1`, `COMPANION_DEFAULT_MAX_WALK_KM=2.0`.
-- Generation: `POPULAR_TRIPS_PER_PERSONA=5`, `POPULAR_TRIP_MIN_STOPS=4`,
+- Generation: `POPULAR_TRIPS_PER_PERSONA=10`, `POPULAR_TRIP_MIN_STOPS=4`,
   `POPULAR_TRIP_MAX_STOPS=6`, `POPULAR_TRIPS_CATALOG_LIMIT=150`, `LOCATION_SLUG` (optional),
+  `POPULAR_TRIPS_FILL_MISSING=1` (top-up mode: keep existing trips, only generate for
+  personas below the per-persona target — use after a partial/failed run),
   reuse `GEMINI_API_KEY` / `GEMINI_MODEL`.
 - Web: `featureFlags.companionSuggestions.enabled` toggles the prompt.
 
 ## Anti-nag & autonomy
 - Suggestions are soft/dismissible; never force-replace the next activity.
 - Per-trip cap + cooldown between suggestions (in-memory per engine process; resets on restart).
+
+## Debugging
+- `GET /recommendations/companion-debug/{trip_id}` (engine, port 8000) returns the
+  cosine similarity between the trip's current preference vector and **every**
+  persona (sorted, with `passes_threshold` / `gap_to_threshold`), plus the
+  anti-nag state (`shown_count`, cooldown, `currently_rate_limited`).
+- Add `?place_id=<liked place>` to dry-run a like: which popular trips contain
+  the place, per-trip persona similarity, the matched trip, each unseen stop
+  with its distance and reachability, and the final would-suggest outcome.
+  Nothing is mutated (rate-limit counters untouched).
+- Every real like also logs its outcome to the engine log under `[Companion]`:
+  rate-limited / place-not-in-pool / below-threshold (with the actual per-persona
+  sims) / no-unseen-stops / none-reachable / suggested.
 
 ## Verification
 - Engine unit tests (no DB; monkeypatched boundaries): `engine/tests/test_companion.py`
