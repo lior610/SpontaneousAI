@@ -481,7 +481,7 @@ export default function WizardPage() {
               <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-4">
                 <p className="text-sm font-medium text-destructive">Could not save trip</p>
                 <p className="mt-1 text-sm text-muted-foreground">{saveError}</p>
-                {(saveError.includes('(status') || saveError.toLowerCase().includes('failed to fetch')) && (
+                {!saveError.toLowerCase().includes('overlap') && (
                   <p className="mt-2 text-xs text-muted-foreground">
                     Check that the API is running (e.g. npm run dev in api/) and the database is set up (see database/README.md).
                   </p>

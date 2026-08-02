@@ -126,9 +126,7 @@ export async function saveTripSetup(setup: TripSetup, editTripId?: number | null
         'Your account was not found in the database. Please log out and log in again, or register if you haven’t yet.',
       );
     }
-    if (res.status >= 400 && res.status < 500 && parsedError) {
-      // Client validation error (bad dates, missing fields, overlap, etc.) — show the
-      // server's message as-is rather than a generic wrapper implying an outage.
+    if (res.status === 409 && parsedError) {
       throw new Error(parsedError);
     }
     throw new Error(`Failed to save trip (status ${res.status}): ${parsedError || errorText || res.statusText}`);
