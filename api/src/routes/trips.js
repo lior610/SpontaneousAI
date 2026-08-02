@@ -9,6 +9,7 @@ router.get('/', tripsController.getTrips);
 router.get('/:id/activities', tripsController.getTripActivities);
 router.get('/:id', tripsController.getTripById);
 router.get('/:id/next-activity', tripsController.getNextActivity);
+router.post('/:id/expand-range', tripsController.expandWalkingRange);
 router.post('/:id/activities/complete', tripsController.completeTripActivity);
 router.post('/:id/activities/skip', tripsController.skipTripActivity);
 router.post('/:id/food-intercept/dismiss', tripsController.dismissFoodIntercept);
