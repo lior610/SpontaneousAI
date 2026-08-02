@@ -241,7 +241,7 @@ export const createTrip = async (req, res) => {
     }
 
     const validTransport = ['walking', 'public', 'taxi'];
-    let preferredTransportationValue = null;
+    let preferredTransportationValue = 'walking';
     if (preferred_transportation !== undefined && preferred_transportation !== null && preferred_transportation !== '') {
       if (!validTransport.includes(preferred_transportation)) {
         return res.status(400).json({
