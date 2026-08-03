@@ -27,7 +27,7 @@ import os
 import sys
 import logging
 from pathlib import Path
-from typing import List, Optional, Tuple, Any
+from typing import List, Optional, Tuple
 
 # Add shared/python to path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]

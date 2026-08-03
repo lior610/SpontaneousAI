@@ -7,18 +7,13 @@ allowing similarity comparisons between different texts.
 
 Flow: Text → Embedding Service → Vector → Vector Search → Database
 
-Note:
-    This is a placeholder service. Implementation should use:
-    - OpenAI embeddings API
-    - Sentence transformers (Hugging Face)
-    - Or other embedding models
+Uses a SentenceTransformer model (Hugging Face) to produce embeddings.
 """
 from typing import List
 from sentence_transformers import SentenceTransformer
 import asyncio
 from functools import lru_cache
 
-# Model name constant - shared across the codebase
 MODEL_NAME = 'all-MiniLM-L6-v2'
 
 # Cache the model instance to avoid reloading
@@ -40,11 +35,6 @@ async def generate_embedding(text: str) -> List[float]:
         
     Returns:
         List of floats representing the embedding vector
-        
-    Note:
-        When implementing, only embed fields with semantic meaning:
-        - Name, description, tags, categories
-        - Skip purely numerical or structural fields
     """
     model = _get_model()
     # Run encoding in thread pool to avoid blocking

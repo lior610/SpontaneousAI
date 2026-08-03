@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { showAppNotification } from '../services/notificationService';
 
 // A simple global state for dev tools
@@ -41,11 +41,6 @@ export function DevToolsPanel() {
   const now = new Date();
   const defaultTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
   const [mockTimeInput, setMockTimeInput] = useState(defaultTime);
-
-  // DevTools enabled for production demo
-  // if (import.meta.env.MODE !== 'development') {
-  //   return null;
-  // }
 
   const handleTestNotification = () => {
     showAppNotification('Test Notification', 'This is a test from DevTools!');

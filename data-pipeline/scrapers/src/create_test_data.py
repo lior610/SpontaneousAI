@@ -2,7 +2,6 @@
 import json
 import random
 import os
-from collections import Counter
 
 def create_test_data():
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -16,7 +15,6 @@ def create_test_data():
         return
 
     # 1. Analyze data
-    name_counts = Counter(p['name'] for p in all_places if p.get('name'))
     places_by_name = {}
     for p in all_places:
         name = p.get('name')

@@ -12,16 +12,6 @@ export interface TripConstraints {
   transportType: 'walking' | 'public' | 'taxi';
 }
 
-export interface ItineraryItem {
-  id: string;
-  title: string;
-  description: string;
-  image: string;
-  estimatedTime: string;
-  category: 'food' | 'nature' | 'culture' | 'nightlife' | 'general';
-  order: number;
-}
-
 export interface TripSetup {
   startDate: Date | null;
   endDate: Date | null;

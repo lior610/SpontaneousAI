@@ -1087,14 +1087,10 @@ export const getNextActivity = async (req, res) => {
     let cached = tripRecommendationsCache.get(tripId);
     const cacheExpired = cached && (Date.now() - cached.fetchedAt > CACHE_TTL_MS);
     if (cacheExpired) {
-      console.log(`[API] Cache expired for trip ${tripId} (age: ${Math.round((Date.now() - cached.fetchedAt) / 1000)}s), refreshing...`);
       tripRecommendationsCache.delete(tripId);
       cached = null;
     }
-    let freshBatch = false;
     if (!cached || cached.currentIndex >= cached.results.length) {
-      freshBatch = true;
-      console.log(`[API] Cache ${!cached ? 'empty' : 'exhausted'} for trip ${tripId}, fetching from engine...`);
       try {
         const recRes = await axios.post(`http://${engineHost}:8000/recommendations/`, {
           user_id: trip.user_id,
@@ -1118,7 +1114,6 @@ export const getNextActivity = async (req, res) => {
     const nextRec = cached.results[cached.currentIndex];
     cached.currentIndex++;
     const attr = nextRec.attraction;
-    const cacheAgeSeconds = Math.round((Date.now() - cached.fetchedAt) / 1000);
 
     res.json({
       activity: {
@@ -1136,14 +1131,7 @@ export const getNextActivity = async (req, res) => {
         lng: attr.longitude,
         completed: false
       },
-      userLocation: position ? { lat: current_lat, lng: current_lng } : null,
-      _debug: {
-        source: freshBatch || cacheExpired ? 'fresh_batch' : 'cached_batch',
-        batchIndex: cached.currentIndex,
-        batchSize: cached.results.length,
-        cacheAgeSeconds,
-        reason: cacheExpired ? 'ttl_expired' : freshBatch ? 'new_or_exhausted' : 'from_cache'
-      }
+      userLocation: position ? { lat: current_lat, lng: current_lng } : null
     });
 
   } catch (error) {

@@ -1,6 +1,5 @@
 import urllib.request
 import json
-import sys
 
 # Extracted directly from the PostgreSQL "users" and "trips" databases via psycopg2
 test_cases = [

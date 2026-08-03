@@ -8,10 +8,7 @@ import { format } from 'date-fns';
 import { API_BASE } from '@/config';
 import {
   TripSetup,
-  TripPreferences,
-  TripConstraints,
   Activity,
-  defaultTripSetup,
 } from '@/types/trip';
 
 /** Result of saving trip setup: trip is created in DB and user preferences are updated. */
@@ -70,11 +67,6 @@ export async function updateUserPreferences(setup: TripSetup): Promise<void> {
 }
 
 // ─── Trip Setup ───────────────────────────────────────────────
-
-export async function fetchTripSetup(): Promise<TripSetup> {
-  // TODO: GET /api/trips/:id
-  return { ...defaultTripSetup };
-}
 
 export async function saveTripSetup(setup: TripSetup, editTripId?: number | null): Promise<SaveTripResult> {
   const userId = getCurrentUserId();
@@ -140,21 +132,6 @@ export async function saveTripSetup(setup: TripSetup, editTripId?: number | null
 
   return { setup, tripId };
 }
-
-export async function updateTripPreferences(
-  preferences: Partial<TripPreferences>
-): Promise<TripPreferences> {
-  // TODO: PATCH /api/trips/:id/preferences
-  return preferences as TripPreferences;
-}
-
-export async function updateTripConstraints(
-  constraints: Partial<TripConstraints>
-): Promise<TripConstraints> {
-  // TODO: PATCH /api/trips/:id/constraints
-  return constraints as TripConstraints;
-}
-
 
 // ─── Activities ───────────────────────────────────────────────
 
@@ -303,12 +280,3 @@ export async function fetchCompletedActivities(tripId: number): Promise<Complete
   return Array.isArray(data.activities) ? data.activities : [];
 }
 
-// ─── Trip Lifecycle ───────────────────────────────────────────
-
-export async function startTrip(): Promise<void> {
-  // TODO: POST /api/trips/:id/start
-}
-
-export async function restartTrip(): Promise<void> {
-  // TODO: POST /api/trips/:id/restart
-}

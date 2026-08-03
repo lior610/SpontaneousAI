@@ -51,7 +51,6 @@ export function TripPage() {
   const state = (location.state as { tripSetup?: TripSetup; tripId?: number }) ?? {};
   const tripId = state.tripId;
   const tripSetup: TripSetup = state.tripSetup ?? defaultTripSetup;
-  // state.tripId is the created trip id from the wizard (for future API calls e.g. next activity)
 
   const [currentActivity, setCurrentActivity] = useState<Activity | null>(null);
   const [completedActivities, setCompletedActivities] = useState<Activity[]>([]);
@@ -219,7 +218,6 @@ export function TripPage() {
     }
     if (result.activity && tripId) {
       sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(result.activity));
-      console.log(`[TripPage] Next Activity Generated: ${result.activity.title} at [${result.activity.lat}, ${result.activity.lng}]`);
     }
   };
 

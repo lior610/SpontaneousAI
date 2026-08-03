@@ -193,7 +193,6 @@ def identify_non_unique_names(places):
     
     # Return only non-unique names (count > 1)
     non_unique = [name for name, count in name_counts.items() if count > 1]
-    # return amount of unique names found
     all_places_count = len(name_counts)
     
     logger.info(f"Found {len(non_unique)} non-unique place names (chains/duplicates) out of {all_places_count} total places")
@@ -245,9 +244,9 @@ def main():
         logger.info(f"Summary - Total places: {len(filtered_places)}, "
                    f"Attractions: {attractions_count}, Utilities: {utilities_count}, Excluded: {excluded_count}")
         
-        # Identify non-unique names
-        non_unique_names = identify_non_unique_names(filtered_places)
-        
+        # Log non-unique names (chains/duplicates) for visibility
+        identify_non_unique_names(filtered_places)
+
         return True
         
     except Exception as e:

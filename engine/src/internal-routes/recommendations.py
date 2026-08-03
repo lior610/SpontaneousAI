@@ -4,7 +4,7 @@ Recommendations Router - API endpoints for receiving recommendations and posting
 import logging
 import random
 from typing import List
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 try:
     from zoneinfo import ZoneInfo
 except ImportError:

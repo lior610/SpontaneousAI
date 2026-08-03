@@ -78,7 +78,7 @@ def execute_cluster_similarity_query(
     # Bounding box: only consider attractions within walking distance.
     # Rectangular approximation — corners can be up to max_walk_km * sqrt(2).
     if user_lat is not None and user_lng is not None and max_walk_km is not None:
-        soft_limit_km = max_walk_km * 1.0
+        soft_limit_km = max_walk_km
 
         lat_offset = soft_limit_km / 111.045  # 1 degree lat ≈ 111 km
         min_lat = user_lat - lat_offset

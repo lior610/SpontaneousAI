@@ -23,7 +23,6 @@ import sys
 import asyncio
 import logging
 from pathlib import Path
-import os
 from typing import Dict, List, Optional, Any
 
 import numpy as np

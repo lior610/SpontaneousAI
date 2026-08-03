@@ -156,7 +156,6 @@ function evaluateGateConditions(localHour, localMinute, todayActivities, lastFoo
   const timeSinceFoodMet = hoursSinceFood >= HOURS_THRESHOLD;
 
   const conditionsMet = [inMealWindow, activityCountMet, timeSinceFoodMet].filter(Boolean).length;
-  console.log(`[FoodIntercept] Gate check: mealWindow=${inMealWindow} (${timeDecimal.toFixed(2)}), activityCount=${activityCountMet} (${activitiesSinceFood}/${ACTIVITY_THRESHOLD}), timeSinceFood=${timeSinceFoodMet} (${hoursSinceFood.toFixed(2)}h/${HOURS_THRESHOLD}h) → ${conditionsMet}/3 conditions met`);
   return conditionsMet >= 2;
 }
 
@@ -194,7 +193,6 @@ Last food activity: ${lastFoodStr}
 Given what this user has done today, is it appropriate to suggest a food break now?`;
 
   try {
-    console.log('[FoodIntercept] LLM prompt:', prompt);
     const result = await geminiModel.generateContent(prompt);
     const answer = result.response.text().trim().toLowerCase();
     console.log('[FoodIntercept] LLM response:', answer);

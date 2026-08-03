@@ -1,7 +1,7 @@
 // Centralized location management: validation, storage, and retrieval of user positions
 import * as usersDb from '../db/usersConnection.js';
 
-export function validate(lat, lng) {
+function validate(lat, lng) {
   const errors = [];
   if (lat == null || isNaN(lat) || lat < -90 || lat > 90) {
     errors.push('lat must be a number between -90 and 90');

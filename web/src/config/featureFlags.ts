@@ -5,7 +5,6 @@ export const featureFlags = {
     showEstimatedTime: false,
   },
   feedbackPopup: {
-    showExtendedFeedbackOptions: false,
     showSpecificNeeds: true,
   },
   wizard: {

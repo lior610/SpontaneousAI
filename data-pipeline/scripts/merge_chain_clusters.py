@@ -58,8 +58,6 @@ def normalize_name(name: str) -> str:
 
 
 def main():
-    import os
-
     config = get_db_config()
     location_slug = os.getenv("LOCATION_SLUG")
     logger.info(f"Connecting to {config['host']}:{config['port']}/{config['database']}")

@@ -39,7 +39,7 @@ except ImportError:
 _pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
 
 def get_db_config():
-        return {
+    return {
         'host': os.getenv('POSTGRES_HOST', 'db'),  # Docker service name
         'port': int(os.getenv('POSTGRES_PORT', '5432')),
         'database': os.getenv('POSTGRES_ATTRACTIONS_DB', 'attractions'),

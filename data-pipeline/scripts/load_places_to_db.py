@@ -99,14 +99,6 @@ def _normalize_chain_name(name: str) -> str:
     return " ".join((name or "").lower().strip().split())
 
 
-def _get_name_cat_key(place: Dict[str, Any]) -> tuple:
-    """Return (name_lower, cat_str) for grouping. cat_str is sorted for consistency."""
-    name = _normalize_chain_name(place.get("name") or "")
-    categories = place.get("categories") or []
-    cat_str = " ".join(sorted(str(c) for c in categories)) if isinstance(categories, list) else str(categories)
-    return (name, cat_str)
-
-
 def _get_chain_name_key(place: Dict[str, Any]) -> str:
     """Return normalized name only - for name-only chain detection."""
     return _normalize_chain_name(place.get("name") or "")
@@ -120,7 +112,7 @@ def _get_cat_str(place: Dict[str, Any]) -> str:
 
 def _compute_chain_keys(places: List[Dict[str, Any]]) -> Tuple[set, dict, dict]:
     """
-    Return (chain_keys, chain_desc_map).
+    Return (chain_keys, chain_desc_map, chain_cat_map).
     Uses NAME ONLY for chain detection - so "Dunkin'" with different category combos
     still clusters together. chain_key = normalized name.
     """

@@ -40,7 +40,7 @@ export async function showAppNotification(title: string, body: string, data?: an
     try {
       const notification = new Notification(title, {
         body,
-        icon: '/logo.svg', // Fixed icon path
+        icon: '/logo.svg',
         data,
       });
 
