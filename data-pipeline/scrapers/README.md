@@ -12,8 +12,6 @@ The data pipeline consists of several steps:
 
 3.  **Vibe Enrichment (`get-vibe.py`)**: The `get-vibe.py` script takes the filtered data and uses the Google Gemini API to generate descriptive "vibes," budget estimates, and typical hours for each place. It has special logic to create varied profiles for chain businesses. The final, enriched data is saved as `places_enriched.json`. This script uses caching to avoid re-generating data for places it has already processed.
 
-4.  **Test Data Creation (`create_test_data.py`)**: For development and testing, `create_test_data.py` can be used. It creates a smaller, representative sample of the data from `filtered_places.json` and saves it as `test_places.json`.
-
 ## Directory Structure
 
 -   **`src/`**: Contains the Python scripts for the pipeline.

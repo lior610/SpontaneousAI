@@ -8,7 +8,7 @@ The system generates a personal and dynamic trip itinerary in real time using da
 | API | /api | Handles user accounts, forwards requests to Engine. | Node.js |
 | Engine | /engine | "Thinks" about recommendations, manages DB Structure. | Python, FastAPI |
 | Database | /database | Stores data and AI Vectors. | PostgreSQL |
-| Shared | /shared-api | Ensures Web and Engine speak the same language. | OpenAPI |
+| Shared | /shared/api | Ensures Web and Engine speak the same language. | OpenAPI |
 
 - Engine: http://localhost:8000
 - API: http://localhost:3000
