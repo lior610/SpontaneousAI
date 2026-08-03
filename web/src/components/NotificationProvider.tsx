@@ -42,7 +42,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     };
 
     eventSource.onerror = (err) => {
-      console.error('SSE connection error:', err);
+      if (eventSource.readyState === EventSource.CONNECTING) {
+        console.warn('SSE connection lost, reconnecting...');
+      } else {
+        console.error('SSE connection error:', err);
+      }
     };
 
     return () => {

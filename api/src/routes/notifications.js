@@ -14,15 +14,26 @@ router.get('/stream', (req, res) => {
     return res.status(400).json({ error: 'invalid user_id' });
   }
 
+  // Disable socket timeouts for long-lived SSE stream
+  if (req.socket) {
+    req.socket.setTimeout(0);
+    req.socket.setNoDelay(true);
+    req.socket.setKeepAlive(true);
+  }
+
   // Set headers for Server-Sent Events
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
+    'Cache-Control': 'no-cache, no-transform',
     'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
   });
 
   // Write an initial comment to establish the connection
   res.write(': connected\n\n');
+  if (typeof res.flush === 'function') {
+    res.flush();
+  }
 
   notificationService.addClient(userId, res);
 
