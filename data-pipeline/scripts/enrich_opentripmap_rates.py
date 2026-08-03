@@ -73,7 +73,7 @@ def parse_rate(rate_val: Any) -> Optional[int]:
 
 
 def fetch_radius(api_key: str, lon: float, lat: float, radius: int = 250, limit: int = 10) -> list:
-    """Fetch places from OpenTripMap radius API. Raises OpenTripMapAPIError on rate limit / auth errors."""
+    """Raises OpenTripMapAPIError on rate limit / auth errors."""
     url = f"{API_BASE}/radius"
     params = {"lon": lon, "lat": lat, "radius": radius, "limit": limit, "format": "json", "apikey": api_key}
     r = requests.get(url, params=params, timeout=10)
@@ -88,7 +88,7 @@ def fetch_radius(api_key: str, lon: float, lat: float, radius: int = 250, limit:
 
 
 def fetch_xid(api_key: str, xid: str) -> Optional[Dict]:
-    """Fetch place details by xid. Raises OpenTripMapAPIError on rate limit / auth errors."""
+    """Raises OpenTripMapAPIError on rate limit / auth errors."""
     url = f"{API_BASE}/xid/{xid}"
     r = requests.get(url, params={"apikey": api_key}, timeout=10)
     if r.status_code in API_ERROR_STATUSES:
@@ -107,7 +107,7 @@ _NAME_STOPWORDS = frozenset({
 })
 
 def _normalize_name(name: str) -> str:
-    """Lowercase, collapse whitespace, strip punctuation, remove stopwords for comparison."""
+    """Strip punctuation/stopwords and lowercase, for comparing names."""
     if not name:
         return ""
     s = re.sub(r"[^\w\s]", " ", str(name).lower())

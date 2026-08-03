@@ -58,7 +58,7 @@ export default function WizardPage() {
   const [locations, setLocations] = useState<{ id: string, name: string, region: string, country: string }[]>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
 
-  // Require login: redirect to login if not authenticated
+  // Redirect to login if not authenticated
   const user = getCurrentUser();
   useEffect(() => {
     if (!user) {

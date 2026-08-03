@@ -238,12 +238,9 @@ export function TripPage() {
     setCurrentActivity(null);
   };
 
-  // Mark the current activity done and advance to the next one. The backend uses the
-  // arrival timestamp (from the geofence) to measure dwell time; when no explicit
-  // feedback is given it asks the LLM whether the user likely didn't enjoy it.
-  //
-  // If the like matches a popular trip, the backend returns a companion suggestion;
-  // we offer it before fetching the next activity (accept -> show it, dismiss -> normal next).
+  // Backend uses the geofence arrival timestamp to measure dwell time; without explicit
+  // feedback it asks the LLM whether the user likely disliked the activity. A like that
+  // matches a popular trip returns a companion suggestion, offered before the next activity.
   const finishActivity = async (feedback?: Activity['feedback'], notifyNext?: boolean) => {
     if (!tripId || finishingRef.current) return;
     finishingRef.current = true;

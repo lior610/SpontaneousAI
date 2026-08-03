@@ -1,7 +1,3 @@
-/**
- * Users Controller - Handles user-related request/response logic
- */
-
 import bcrypt from 'bcryptjs';
 import * as usersDb from '../db/usersConnection.js';
 import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedding.js';
@@ -23,15 +19,14 @@ export const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate id is a number
     const userId = parseInt(id, 10);
     if (isNaN(userId) || userId <= 0) {
-      return res.status(400).json({ 
-        error: 'Invalid user ID. Must be a positive integer' 
+      return res.status(400).json({
+        error: 'Invalid user ID. Must be a positive integer'
       });
     }
 
-    // Minimal columns so it works with or without preference columns; wizard uses PUT to update preferences
+    // Minimal columns so this works with or without preference columns present
     const result = await usersDb.query(
       `SELECT id, username, email FROM users WHERE id = $1`,
       [userId]
@@ -63,14 +58,12 @@ export const createUser = async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
-    // Validate input
     if (!username || !email || !password) {
       return res.status(400).json({
         error: 'Username, email, and password are required'
       });
     }
 
-    // Validate email format (basic)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({
@@ -78,21 +71,18 @@ export const createUser = async (req, res) => {
       });
     }
 
-    // Validate username format (alphanumeric and underscore only, 3-30 chars)
     if (!/^[a-zA-Z0-9_]{3,30}$/.test(username)) {
       return res.status(400).json({
         error: 'Username must be 3-30 characters and contain only letters, numbers, and underscores'
       });
     }
 
-    // Validate password length (minimum 6 characters)
     if (password.length < 6) {
       return res.status(400).json({
         error: 'Password must be at least 6 characters long'
       });
     }
 
-    // Check if username already exists
     const existingUser = await usersDb.query(
       'SELECT id FROM users WHERE username = $1',
       [username]
@@ -101,7 +91,6 @@ export const createUser = async (req, res) => {
       return res.status(409).json({ error: 'Username already exists' });
     }
 
-    // Check if email already exists
     const existingEmail = await usersDb.query(
       'SELECT id FROM users WHERE email = $1',
       [email]
@@ -157,32 +146,29 @@ export const updateUser = async (req, res) => {
       pace_preference !== undefined ||
       dietary_style !== undefined;
 
-    // Validate id is a number
     const userId = parseInt(id, 10);
     if (isNaN(userId) || userId <= 0) {
-      return res.status(400).json({ 
-        error: 'Invalid user ID. Must be a positive integer' 
+      return res.status(400).json({
+        error: 'Invalid user ID. Must be a positive integer'
       });
     }
 
-    // Check if user exists
     const userCheck = await usersDb.query(
       'SELECT id FROM users WHERE id = $1',
       [userId]
     );
 
     if (userCheck.rows.length === 0) {
-      return res.status(404).json({ 
-        error: 'User not found' 
+      return res.status(404).json({
+        error: 'User not found'
       });
     }
 
-    // Build update query dynamically based on provided fields
+    // Dynamic update: only touch fields the caller actually sent
     const updates = [];
     const values = [];
     let paramIndex = 1;
 
-    // Validate and add fields
     if (home_country !== undefined) {
       updates.push(`home_country = $${paramIndex}`);
       values.push(home_country || null);
@@ -288,17 +274,13 @@ export const updateUser = async (req, res) => {
       paramIndex++;
     }
 
-    // Check if any fields to update
     if (updates.length === 0) {
-      return res.status(400).json({ 
-        error: 'No fields provided to update' 
+      return res.status(400).json({
+        error: 'No fields provided to update'
       });
     }
 
-    // Add updated_at timestamp
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
-    
-    // Add user id to values for WHERE clause
     values.push(userId);
 
     // Execute update. RETURN only columns that exist in a minimal schema (id, username, email)

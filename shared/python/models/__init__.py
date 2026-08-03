@@ -1,6 +1,3 @@
-"""
-Models module - Shared data models
-"""
 from .attraction import (
     AttractionBase,
     AttractionCreate,

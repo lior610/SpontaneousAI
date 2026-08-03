@@ -14,14 +14,13 @@ router.get('/stream', (req, res) => {
     return res.status(400).json({ error: 'invalid user_id' });
   }
 
-  // Set headers for Server-Sent Events
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive',
   });
 
-  // Write an initial comment to establish the connection
+  // SSE comment line just to open the connection
   res.write(': connected\n\n');
 
   notificationService.addClient(userId, res);

@@ -1,5 +1,4 @@
-// Base notification service for SpontaneousAI
-// Wraps the browser Notification API and provides fallbacks
+// Wraps the browser Notification API with an in-app fallback
 
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
   if (!('Notification' in window)) {
@@ -26,7 +25,7 @@ export function subscribeToNotifications(listener: NotificationListener) {
 }
 
 export async function showAppNotification(title: string, body: string, data?: any) {
-  // Always trigger in-app listeners (useful for fallback or if OS blocks native)
+  // Fire in-app listeners unconditionally — fallback for when native notifications are blocked or denied
   listeners.forEach((fn) => fn(title, body, data));
 
   if (!('Notification' in window)) {
@@ -40,7 +39,7 @@ export async function showAppNotification(title: string, body: string, data?: an
     try {
       const notification = new Notification(title, {
         body,
-        icon: '/logo.svg', // Fixed icon path
+        icon: '/logo.svg',
         data,
       });
 

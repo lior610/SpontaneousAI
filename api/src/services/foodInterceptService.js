@@ -241,13 +241,9 @@ export async function checkFoodIntercept(tripId, trip, position) {
   try {
     const { hour, minute, localStr } = getLocalTime(trip);
 
-    // Get this trip's completed activities for *today only*, in the trip's local
-    // timezone, to evaluate gate conditions. Both sides of the date comparison are
-    // converted to the same zone — consistent with how the rest of this flow derives
-    // local time (getLocalTime above, and the engine's astimezone). Comparing the raw
-    // completed_at::date (Postgres session TZ — UTC in prod) against a trip-local
-    // "today" would shift the day boundary by the trip's UTC offset and leak the wrong
-    // day's activities into the LLM prompt.
+    // "Today" here means today in the trip's local timezone, not the DB session's (UTC
+    // in prod) — comparing against the raw UTC date would shift the day boundary and
+    // leak yesterday's/tomorrow's activities into the LLM prompt.
     const todayResult = await usersDb.query(
       `SELECT title, category, completed_at
        FROM trip_activity_logs
@@ -266,10 +262,7 @@ export async function checkFoodIntercept(tripId, trip, position) {
 
     const llmApproved = await callLlmValidation(localStr, todayActivities, lastFoodActivity, trip.timezone || 'UTC');
     if (!llmApproved) {
-      // Record the decline so we don't re-ask the LLM on every "get another suggestion".
-      // A plain skip logs no activity and advances time by seconds, so the gate would
-      // keep passing and we'd re-ask for the same "no". Completing a real activity clears
-      // this (see clearLlmDeclineCooldown) so a changed context can be re-evaluated.
+      // Suppress re-asking until a real activity is completed (see clearLlmDeclineCooldown).
       foodLlmDeclineCooldowns.set(tripId, { declinedAt: Date.now() });
       console.log('[FoodIntercept] LLM declined food suggestion, suppressing for cooldown, continuing normal flow');
       return { triggered: false };
@@ -278,8 +271,7 @@ export async function checkFoodIntercept(tripId, trip, position) {
     console.log('[FoodIntercept] LLM approved, fetching food batch from engine...');
     const batch = await fetchFoodBatch(trip, position);
     if (batch.length === 0) {
-      // No food to serve right now — suppress further checks for the cooldown so the next
-      // "get another suggestion" doesn't re-approve via the LLM only to find nothing again.
+      // Nothing to serve — suppress so we don't re-approve via the LLM only to find nothing again.
       foodLlmDeclineCooldowns.set(tripId, { declinedAt: Date.now() });
       console.log('[FoodIntercept] No food places found, suppressing for cooldown, continuing normal flow');
       return { triggered: false };

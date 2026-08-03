@@ -38,6 +38,8 @@ sys.path.insert(0, str(PROJECT_ROOT / "shared" / "python"))
 import psycopg2
 from psycopg2.extras import execute_values
 
+from db_utils import get_db_config
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -72,16 +74,6 @@ def get_or_create_location(conn, slug: str, name: str, region: str, country: str
         return row[0] if row else None
 
 
-def get_db_config() -> dict:
-    return {
-        "host": os.getenv("POSTGRES_HOST", "localhost"),
-        "port": int(os.getenv("POSTGRES_PORT", "5432")),
-        "database": os.getenv("POSTGRES_ATTRACTIONS_DB", "attractions"),
-        "user": os.getenv("POSTGRES_USER", "postgres"),
-        "password": os.getenv("POSTGRES_PASSWORD", "postgres"),
-    }
-
-
 def load_places(json_path: Path) -> List[Dict[str, Any]]:
     """Load places from JSON file, excluding scraped_at."""
     logger.info(f"Loading places from {json_path}...")
@@ -93,7 +85,7 @@ def load_places(json_path: Path) -> List[Dict[str, Any]]:
 
 
 def _normalize_chain_name(name: str) -> str:
-    """Normalize name for chain grouping: lower, strip, collapse whitespace."""
+    """Normalize name for chain grouping."""
     if not name:
         return ""
     return " ".join((name or "").lower().strip().split())

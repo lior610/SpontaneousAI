@@ -1,40 +1,12 @@
-"""
-Database Query Layer for Attractions.
-
-This module contains pure SQL query construction and execution.
-It does NOT contain business logic - it only applies filters and queries
-that are passed in from higher layers.
-
-Responsibilities:
-- Build SQL queries with filters
-- Execute queries against the database
-- Return raw database results
-
-Flow: Vector Search → Attractions Queries → PostgreSQL
-"""
+"""Pure SQL query construction/execution for attractions - no business logic, filters come from the caller."""
 from typing import List, Tuple, Optional, Any, Dict
 
 
 def _apply_filters(query: str, params: List[Any], filters: Dict[str, Any]) -> Tuple[str, List[Any]]:
     """
-    Append WHERE clauses for filters passed from the service layer.
-    
-    This function applies whatever filters it receives - it does NOT decide
-    which filters are "hard" or "soft". That decision is made in the service layer.
-    
-    Filter keys must match database column names exactly (no mapping needed).
-    
-    Supported filter types:
-    - Equality filters: {"country": "France"} -> "country = %s"
-    - Boolean filters: {"is_open_now": True} -> "is_open_now = TRUE"
-    
-    Args:
-        query: SQL query string (must already have a WHERE clause)
-        params: List of query parameters
-        filters: Dictionary of filters to apply (keys = database column names)
-        
-    Returns:
-        Tuple of (modified query string, updated parameters list)
+    Append WHERE clauses for whatever filters it's given — doesn't decide
+    hard vs. soft, that's the service layer's call. Keys must match DB
+    column names exactly.
     """
     for column_name, filter_value in filters.items():
         if filter_value is None:
@@ -61,22 +33,7 @@ def _apply_similarity_constraints(
     min_similarity: Optional[float],
     limit: int,
 ) -> Tuple[str, List[Any]]:
-    """
-    Append similarity threshold and ordering clauses.
-    
-    Uses pgvector cosine distance operator (<=>) for similarity calculation.
-    Similarity score = 1 - (distance / 2), where distance is 0-2.
-    
-    Args:
-        query: SQL query string
-        params: List of query parameters
-        embedding_str: Embedding in pgvector string format
-        min_similarity: Optional minimum similarity threshold (0-1)
-        limit: Maximum number of results
-        
-    Returns:
-        Tuple of (modified query string, updated parameters list)
-    """
+    """Append similarity threshold + ordering, via pgvector's <=> cosine distance op (similarity = 1 - distance/2)."""
     # Apply minimum similarity threshold if specified
     if min_similarity is not None:
         # Convert similarity (0-1) to max distance (0-2)
@@ -100,28 +57,9 @@ def execute_similarity_query(
     filters: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[Tuple[Any, ...]], List[str]]:
     """
-    Execute database query to fetch attractions ordered by vector similarity.
-    
-    This is a pure database query function. It:
-    1. Builds the SQL query with filters
-    2. Executes the query
-    3. Returns raw database results
-    
-    Args:
-        conn: psycopg2 database connection
-        embedding_str: Embedding in pgvector string format "[0.1,0.2,...]"
-        limit: Maximum number of results to return
-        min_similarity: Optional minimum similarity threshold (0-1)
-        filters: Optional dictionary of hard filters (city, country, is_open_now, etc.)
-        
-    Returns:
-        Tuple of:
-        - rows: List of tuples, each tuple is one attraction row
-        - column_names: List of column names matching the row order
-        
-    Note:
-        The similarity score is calculated as: 1 - (cosine_distance / 2)
-        This gives a score from 0-1 where 1 is identical and 0 is completely different.
+    Fetch attractions ordered by vector similarity; returns (rows, column_names).
+
+    Similarity = 1 - (cosine_distance / 2), giving 0-1 where 1 is identical.
     """
     # Base query: select all attraction fields plus similarity score (matches AttractionBase model)
     query = """

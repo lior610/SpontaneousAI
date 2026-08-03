@@ -22,10 +22,9 @@ from src.utils.formatting import format_embedding_for_pgvector, normalize_attrac
 logger = logging.getLogger(__name__)
 
 class ClusterRetrievalService:
-    """
-    Handles retrieving candidate attractions using cluster-diverse vector search.
-    """
-    
+    """Retrieves candidate attractions using cluster-diverse vector search."""
+
+
     def __init__(self, top_per_cluster: int = 3, max_clusters: int = 5):
         self.top_per_cluster = top_per_cluster
         self.max_clusters = max_clusters
@@ -41,18 +40,7 @@ class ClusterRetrievalService:
         max_walk_km: Optional[float] = None,
         current_hour: Optional[int] = None
     ) -> List[Dict[str, Any]]:
-        """
-        Fetch a diverse candidate pool of attractions.
-        
-        Args:
-            location_id: The ID of the current location/city
-            trip_id: Current trip context (used to fetch excluded items)
-            preference_vector: User's 384d preference embedding
-            context_filters: Hard filters to apply in SQL
-            
-        Returns:
-            List of normalized attraction dictionaries
-        """
+        """Fetch a diverse candidate pool of attractions via cluster-aware vector search."""
         if preference_vector is None or len(preference_vector) == 0:
             logger.error("preference_vector is empty or none")
             return []

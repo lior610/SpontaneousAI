@@ -1,7 +1,4 @@
-"""
-PostgreSQL connection module for the Attraction Engine service.
-Provides reusable database connection functions and context managers.
-"""
+"""Postgres connection pool/helpers for the Attraction Engine service."""
 import psycopg2
 import psycopg2.pool
 import os
@@ -21,7 +18,6 @@ def get_db_config():
     }
 
 def init_pool(minconn: int = 1, maxconn: int = 20):
-    """Initialize the connection pool."""
     global _pool
     if _pool is None:
         config = get_db_config()
@@ -38,16 +34,14 @@ def get_connection():
     return pool.getconn()
 
 def return_connection(conn):
-    """Return a connection to the pool."""
     if _pool:
         _pool.putconn(conn)
 
 @contextmanager
 def get_db_connection() -> Generator[psycopg2.extensions.connection, None, None]:
     """
-    Context manager for database connections.
-    Automatically handles connection acquisition and return.
-    
+    Handles connection acquisition/return automatically.
+
     Usage:
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -68,12 +62,7 @@ def get_db_connection() -> Generator[psycopg2.extensions.connection, None, None]
             return_connection(conn)
 
 def test_connection() -> dict:
-    """
-    Test database connection.
-    
-    Returns:
-        dict: Connection test result with 'success' and either 'timestamp' or 'error'
-    """
+    """Returns {'success': True, 'timestamp': ...} or {'success': False, 'error': ...}."""
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -84,7 +73,6 @@ def test_connection() -> dict:
         return {'success': False, 'error': str(e)}
 
 def close_pool():
-    """Close all connections in the pool."""
     global _pool
     if _pool:
         _pool.closeall()

@@ -18,17 +18,10 @@ import numpy as np
 
 def get_liked_place_ids(conn, trip_id: int) -> List[str]:
     """
-    Return place_ids that the user liked during this trip, oldest first.
+    Place_ids the user liked during this trip, oldest first.
 
-    Used by PreferenceService to build the real-time EMA vector:
-    the embeddings of liked attractions are averaged into the preference vector.
-
-    Args:
-        conn: psycopg2 connection to the users DB
-        trip_id: ID of the current trip
-
-    Returns:
-        List of place_id strings in chronological order
+    Feeds PreferenceComposer's real-time EMA vector (liked attraction
+    embeddings averaged into the preference vector).
     """
     cursor = conn.cursor()
     cursor.execute(
@@ -47,17 +40,10 @@ def get_liked_place_ids(conn, trip_id: int) -> List[str]:
 
 def get_excluded_place_ids(conn, trip_id: int) -> Set[str]:
     """
-    Return place_ids that should be excluded from retrieval for this trip.
+    Place_ids to exclude from retrieval for this trip.
 
-    Includes all three actions (liked, skipped, visited) — once the user
-    has interacted with an attraction it should not be re-recommended.
-
-    Args:
-        conn: psycopg2 connection to the users DB
-        trip_id: ID of the current trip
-
-    Returns:
-        Set of place_id strings
+    Covers all three actions (liked, skipped, visited) — once the user has
+    interacted with an attraction it should not be re-recommended.
     """
     cursor = conn.cursor()
     cursor.execute(
@@ -77,18 +63,10 @@ def get_attraction_embeddings(
     attractions_conn, place_ids: List[str]
 ) -> List[Optional[np.ndarray]]:
     """
-    Fetch embeddings for a list of place_ids from the attractions DB.
+    Fetch embeddings for a list of place_ids, same order as input.
 
-    Used to convert liked place_ids into vectors for the EMA update.
-    Returns embeddings in the same order as place_ids; None for any
-    place_id whose embedding is missing.
-
-    Args:
-        attractions_conn: psycopg2 connection to the attractions DB
-        place_ids: list of place_id strings
-
-    Returns:
-        List of (384,) float32 arrays (or None for missing)
+    None for any place_id whose embedding is missing (used to convert
+    liked place_ids into vectors for the EMA update).
     """
     if not place_ids:
         return []
@@ -120,16 +98,9 @@ def record_feedback(
     action: str,
 ) -> None:
     """
-    Insert or update a feedback row for (trip_id, place_id).
-
-    Uses an upsert so that if the user changes their mind (e.g. first
-    skips then later visits), the action is updated rather than duplicated.
-
-    Args:
-        conn: psycopg2 connection to the users DB
-        trip_id: ID of the current trip
-        place_id: ID of the attraction
-        action: one of 'liked', 'skipped', 'visited'
+    Upsert a feedback row for (trip_id, place_id) — if the user changes their
+    mind (e.g. first skips then later visits), the action is updated in place
+    rather than duplicated.
     """
     if action not in ("liked", "skipped", "visited"):
         raise ValueError(f"Invalid action '{action}'. Must be liked, skipped, or visited.")
@@ -154,17 +125,7 @@ def record_feedback(
 def get_attraction_categories(
     attractions_conn, place_ids: List[str]
 ) -> Set[str]:
-    """
-    Fetch all unique categories for a given list of place_ids.
-    Used to seed the 'real_seen_categories' set for the diversity score.
-    
-    Args:
-        attractions_conn: psycopg2 connection to the attractions DB
-        place_ids: list of place_id strings
-        
-    Returns:
-        Set of unique string categories and types
-    """
+    """Unique categories/types across a list of place_ids, seeds 'real_seen_categories' for the diversity score."""
     if not place_ids:
         return set()
 

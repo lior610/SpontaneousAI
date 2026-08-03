@@ -22,8 +22,7 @@ HEADERS = {
     "Authorization": f"Bearer {FOURSQUARE_API_KEY}"
 }
 
-# NYC Bounds
-# Load configuration from environment variables (Required)
+# Bounding box for random coord sampling - required, no defaults
 try:
     LAT_MIN = float(os.environ["FOURSQUARE_LAT_MIN"])
     LAT_MAX = float(os.environ["FOURSQUARE_LAT_MAX"])
@@ -73,7 +72,7 @@ def normalize_place(p: Dict) -> Dict:
     }
 
 def load_existing_data(file_path: str) -> Dict[str, Dict]:
-    """Loads existing data from a JSON file into a dictionary keyed by place_id."""
+    """Load existing data from a JSON file, keyed by place_id."""
     if not os.path.exists(file_path):
         return {}
     
@@ -86,17 +85,14 @@ def load_existing_data(file_path: str) -> Dict[str, Dict]:
         return {}
 
 def save_data(file_path: str, data: Dict[str, Dict]) -> None:
-    """Saves the values of the data dictionary to a JSON file."""
+    """Write the values of the data dict to a JSON file."""
     final_list = list(data.values())
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(final_list, f, indent=2, ensure_ascii=False)
     logger.info(f"Saved {len(final_list)} total attractions (after dedup) to {file_path}")
 
 def fetch_unique_places(target_count: int, max_retries: int = 5) -> List[Dict]:
-    """
-    Fetches a target number of unique places.
-    Maintains its own 'seen' set to ensure uniqueness within the batch.
-    """
+    """Fetch target_count unique places, tracking seen fsq_place_ids within this batch."""
     results: List[Dict] = []
     seen_ids: set = set()
     consecutive_failures = 0
@@ -132,10 +128,7 @@ def fetch_unique_places(target_count: int, max_retries: int = 5) -> List[Dict]:
     return results
 
 def merge_data(existing: Dict[str, Dict], new_items: List[Dict]) -> Dict[str, Dict]:
-    """
-    Pure function to merge new items into existing data.
-    Returns a new dictionary (or modifies copy) to be somewhat functional.
-    """
+    """Merge new_items into existing (by place_id) without mutating existing."""
     merged = existing.copy()
     for item in new_items:
         merged[item["place_id"]] = item

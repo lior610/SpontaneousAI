@@ -1,11 +1,6 @@
-/**
- * Pure helper for the "walk a bit further?" flow.
- *
- * Given the trip's current walking radius, a step increment, and a hard ceiling,
- * compute the next radius. Kept side-effect free so it can be unit tested without
- * a database (the controller handles persistence + cache invalidation).
- */
-
+// Pure helper for the "walk a bit further?" flow — computes the next radius from the
+// current one, a step, and a ceiling. Side-effect free so it's unit-testable without a
+// DB (the controller handles persistence + cache invalidation).
 /**
  * @param {number} current - current max walking distance (km); non-finite treated as 0.
  * @param {number} step - km to add; non-positive/non-finite falls back to 1.

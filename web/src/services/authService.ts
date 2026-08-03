@@ -1,4 +1,5 @@
 import { API_BASE } from '@/config';
+import { throwApiError } from '@/lib/utils';
 
 export interface AuthUser {
   id: number;
@@ -21,16 +22,7 @@ export async function registerUser(username: string, email: string, password: st
   });
 
   if (!res.ok) {
-    const errorText = await res.text().catch(() => '');
-    try {
-      const data = JSON.parse(errorText) as { error?: string };
-      if (data.error) throw new Error(data.error);
-    } catch (e) {
-      if (e instanceof Error && e.message !== errorText) throw e;
-    }
-    throw new Error(
-      `Failed to register (status ${res.status}): ${errorText || res.statusText}`,
-    );
+    await throwApiError(res, 'Failed to register');
   }
 
   const data = await res.json();
@@ -53,16 +45,7 @@ export async function loginUser(email: string, password: string): Promise<AuthUs
   });
 
   if (!res.ok) {
-    const errorText = await res.text().catch(() => '');
-    try {
-      const data = JSON.parse(errorText) as { error?: string };
-      if (data.error) throw new Error(data.error);
-    } catch (e) {
-      if (e instanceof Error && e.message !== errorText) throw e;
-    }
-    throw new Error(
-      `Failed to login (status ${res.status}): ${errorText || res.statusText}`,
-    );
+    await throwApiError(res, 'Failed to login');
   }
 
   const data = await res.json();
@@ -86,16 +69,7 @@ export async function resetPassword(email: string, newPassword: string, confirmP
   });
 
   if (!res.ok) {
-    const errorText = await res.text().catch(() => '');
-    try {
-      const data = JSON.parse(errorText) as { error?: string };
-      if (data.error) throw new Error(data.error);
-    } catch (e) {
-      if (e instanceof Error && e.message !== errorText) throw e;
-    }
-    throw new Error(
-      `Failed to reset password (status ${res.status}): ${errorText || res.statusText}`,
-    );
+    await throwApiError(res, 'Failed to reset password');
   }
 }
 

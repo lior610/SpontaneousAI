@@ -74,7 +74,6 @@ def extract_unique_categories(input_file):
         logger.error(f"Invalid JSON in {input_file}: {e}")
         raise
     
-    # Iterate through all places and collect categories with counts
     for place in data:
         if 'categories' in place and isinstance(place['categories'], list):
             for category in place['categories']:
@@ -104,13 +103,9 @@ def is_utility(cat_name):
     return bool(_UTILITY_RE.search(cat_name))
 
 def classify_category(category):
-    """Classify category as 'utility' or 'attraction'."""
-    
-    # Check if it's a UTILITY first (takes priority)
+    # Utility takes priority over attraction
     if is_utility(category):
         return 'utility'
-    
-    # Then check if it's an attraction
     elif is_attraction(category):
         return 'attraction'
     return None
@@ -131,20 +126,16 @@ def classify_place(categories):
     return None
 
 def filter_categories(categories):
-    """Filter categories and divide into attractions and utilities."""
-
-
     attractions = []
     utilities = []
-    
+
     for item in categories:
         cat_name = item['category']
         cat_count = item['count']
-        
+
         if cat_count < MINIMUM_COUNT:
             continue
-        
-        # Classify
+
         if classify_category(cat_name) == 'utility':
             utilities.append(item)
         elif classify_category(cat_name) == 'attraction':
@@ -154,15 +145,12 @@ def filter_categories(categories):
 
 
 def filter_places(places_file, attractions_cats, utilities_cats):
-    """Filter places and mark them as attraction or utility."""
-    
-    # Create sets of category names for faster lookup
+    # Sets for O(1) lookup
     attractions_set = {item['category'] for item in attractions_cats}
     utilities_set = {item['category'] for item in utilities_cats}
-    
+
     logger.info(f"Loaded {len(attractions_set)} attraction categories and {len(utilities_set)} utility categories")
-    
-    # Load places
+
     try:
         with open(places_file, 'r', encoding='utf-8') as f:
             places = json.load(f)
@@ -210,9 +198,7 @@ def identify_non_unique_names(places):
         if name:
             name_counts[name] = name_counts.get(name, 0) + 1
     
-    # Return only non-unique names (count > 1)
     non_unique = [name for name, count in name_counts.items() if count > 1]
-    # return amount of unique names found
     all_places_count = len(name_counts)
     
     logger.info(f"Found {len(non_unique)} non-unique place names (chains/duplicates) out of {all_places_count} total places")

@@ -10,7 +10,6 @@ from pathlib import Path
 from collections import Counter
 from google.api_core.exceptions import TooManyRequests
 
-# Load environment variables
 BASE_DIR = Path(__file__).resolve().parents[1]
 dotenv.load_dotenv(BASE_DIR / ".env")
 
@@ -63,7 +62,7 @@ def clean_json_string(json_str):
     return json_str.replace('```json', '').replace('```', '').strip()
 
 def get_utility_data(name):
-    """Generates data for utilities (30% chance of 24/7)."""
+    """Fake utility data: 30% chance of 24/7 hours."""
     if random.random() < 0.30:
         hours = "00:00-23:59"
     else:
@@ -98,10 +97,7 @@ def save_cache(cache_data, cache_file):
 # --- Prompts ---
 
 def generate_big_chain_prompt(chains_list):
-    """
-    For chains with >= 5 locations.
-    Demands 3 variations per chain.
-    """
+    """For chains with >= 5 locations - asks for 3 variations per chain."""
     return f"""
     Task: Create diverse profiles for large chain businesses.
     Input: List of chain names, categories and city.
@@ -129,10 +125,7 @@ def generate_big_chain_prompt(chains_list):
     """
 
 def generate_small_chain_prompt(chains_list):
-    """
-    For chains with 2-4 locations.
-    Demands 1 single profile.
-    """
+    """For chains with 2-4 locations - asks for a single profile."""
     return f"""
     Task: Create a standard profile for chain businesses.
     Input: List of names, categories and city.
@@ -295,7 +288,7 @@ def main():
         name = place.get("name")
         place_id = place.get("place_id")
         
-        # A. IS IT A CHAIN? (In Chain Cache)
+        # Chain (already resolved above)
         if name in chain_cache:
             variations = chain_cache[name]
             chosen_var = random.choice(variations)
@@ -305,7 +298,7 @@ def main():
             place["embedding_desc"] = chosen_var.get("desc")
             final_data.append(place)
 
-        # B. IS IT AN ATTRACTION IN CACHE?
+        # Attraction already cached
         elif is_attraction(place) and place_id in attraction_cache:
             cached_data = attraction_cache[place_id]
             place["budget"] = cached_data.get("budget")
@@ -313,7 +306,7 @@ def main():
             place["embedding_desc"] = cached_data.get("desc")
             final_data.append(place)
 
-        # C. IS IT A UTILITY?
+        # Utility
         elif not is_attraction(place):
             util_info = get_utility_data(name)
             place["budget"] = util_info["budget"]
@@ -321,7 +314,7 @@ def main():
             place["embedding_desc"] = util_info["desc"]
             final_data.append(place)
             
-        # D. UNIQUE ATTRACTION TO BE PROCESSED
+        # Unique attraction - needs an LLM call below
         else:
             unique_attractions.append(place)
 
@@ -332,11 +325,11 @@ def main():
     for i in range(0, len(unique_attractions), BATCH_SIZE_ATTRACTIONS):
         batch = unique_attractions[i : i + BATCH_SIZE_ATTRACTIONS]
         
-        # Filter out attractions that are already in the cache (should not happen with current logic, but good practice)
+        # Defensive: skip anything already cached
         batch_to_process = [p for p in batch if p["place_id"] not in attraction_cache]
 
         if not batch_to_process:
-            # If all items in batch were somehow already cached, just add them and continue
+            # Whole batch was already cached
             for p in batch:
                 if p["place_id"] in attraction_cache:
                     cached_data = attraction_cache[p["place_id"]]
@@ -360,8 +353,7 @@ def main():
                     p["budget"] = data.get("budget")
                     p["hours"] = data.get("hours")
                     p["embedding_desc"] = data.get("desc")
-                    
-                    # Add to cache
+
                     attraction_cache[p["place_id"]] = {
                         "budget": data.get("budget"),
                         "hours": data.get("hours"),

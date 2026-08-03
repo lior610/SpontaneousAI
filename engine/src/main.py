@@ -39,12 +39,12 @@ app.include_router(preferences.router)
 
 @app.get("/status")
 def status():
-    """Status endpoint - returns engine service status"""
+    """Simple liveness probe."""
     return {"service": "engine", "status": "running"}
 
 @app.get("/health")
 def health():
-    """Health check endpoint - tests connection to PostgreSQL host"""
+    """Tests the PostgreSQL connection and surfaces failures as a 503."""
     db_test = test_connection()
     if db_test["success"]:
         return {"status": "healthy", "db_host": "connected"}

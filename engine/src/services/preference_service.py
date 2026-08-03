@@ -1,22 +1,9 @@
 """
-Preference Service — PreferenceComposer.
-
-Builds a single 384d preference vector for a user+trip by blending three
-signal sources:
-
-    1. Historical (0.2) — average of past trip embeddings from user_preference_embeddings
-    2. Trip setup  (0.5) — weighted average of category embeddings + qualifier text
-    3. Real-time   (0.3) — EMA of liked attraction embeddings from trip_feedback
-
-The final vector is L2-normalised and upserted into user_preference_embeddings
-so it survives reconnections and becomes the historical signal for future trips.
-
-Usage:
-    from src.services.preference_service import PreferenceComposer
-
-    composer = PreferenceComposer()
-    pref_vec = await composer.build(user_id=1, trip_id=42)
-    # → np.ndarray shape (384,)
+PreferenceComposer builds a single 384d preference vector per user+trip by
+blending three signals: historical (0.2, past trip embeddings), trip setup
+(0.5, category + qualifier text embeddings), and real-time (0.3, EMA of
+liked attractions). Result is L2-normalised and upserted into
+user_preference_embeddings so it becomes next trip's historical signal.
 """
 import os
 import sys
@@ -104,17 +91,9 @@ class PreferenceComposer:
         """
         Return the preference vector for (user_id, trip_id).
 
-        If a stored embedding already exists for the trip and force_rebuild is
-        False, returns the stored one (fast path for mid-trip requests where
-        the EMA is already up to date).
-
-        Args:
-            user_id: ID of the user
-            trip_id: ID of the current trip
-            force_rebuild: ignore stored embedding and recompute from scratch
-
-        Returns:
-            L2-normalised (384,) float32 preference vector
+        If a stored embedding already exists and force_rebuild is False,
+        returns it directly (fast path for mid-trip requests where the EMA
+        is already up to date).
         """
         if force_rebuild:
             # Invalidate the cache when forcing a rebuild (e.g. from the wizard)
@@ -175,16 +154,8 @@ class PreferenceComposer:
         """
         Apply one liked attraction to the stored preference vector via EMA.
 
-        Called by FeedbackService after recording a 'liked' action.
-        Updates and persists the preference vector in-place.
-
-        Args:
-            user_id: ID of the user
-            trip_id: ID of the current trip
-            liked_place_id: place_id of the attraction the user liked
-
-        Returns:
-            Updated L2-normalised (384,) preference vector
+        Called by FeedbackService after recording a 'liked' action; updates
+        and persists the preference vector in place.
         """
         # Fetch the attraction embedding
         with get_attractions_conn() as conn:

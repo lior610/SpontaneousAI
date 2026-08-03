@@ -1,10 +1,5 @@
-/**
- * Loads environment variables from the single root .env file.
- *
- * The project keeps one .env at the repo root (not per-service). This module must be
- * imported before any module that reads process.env at load time (e.g. the DB pools),
- * so it is the very first import in index.js.
- */
+// One .env at the repo root, not per-service. Must be imported before anything that
+// reads process.env at load time (e.g. the DB pools) — hence first import in index.js.
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';

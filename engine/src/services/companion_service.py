@@ -69,10 +69,10 @@ class CompanionSuggestionService:
 
     def suggest(self, user_id: int, trip_id: int, liked_place_id: str) -> Optional[Dict[str, Any]]:
         """
-        Return a companion suggestion dict (CompanionSuggestion shape) or None.
+        Companion suggestion dict (CompanionSuggestion shape) or None.
 
-        Called only for 'liked' actions, after the EMA update so the preference
-        vector already reflects the just-liked attraction.
+        Called only for 'liked' actions, after the EMA update so the
+        preference vector already reflects the just-liked attraction.
         """
         try:
             suggestion = self._suggest(user_id, trip_id, liked_place_id)
@@ -193,13 +193,11 @@ class CompanionSuggestionService:
 
     def debug_affinity(self, trip_id: int, liked_place_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Diagnostic snapshot for the companion flow (never called on the hot path).
+        Diagnostic snapshot for the companion flow (never on the hot path).
 
-        Returns the cosine similarity between the trip's current preference vector
-        and EVERY persona, plus the anti-nag state. If `liked_place_id` is given,
-        also simulates a like on that place step by step (which popular trips
-        contain it, per-trip similarity, unseen stops, reachability) WITHOUT
-        mutating any rate-limit state.
+        Cosine similarity between the trip's preference vector and EVERY
+        persona, plus anti-nag state. If `liked_place_id` is given, also
+        simulates a like step by step without mutating rate-limit state.
         """
         with get_users_conn() as users_conn:
             pref_vec = get_current_embedding(users_conn, trip_id)

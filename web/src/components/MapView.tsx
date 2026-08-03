@@ -45,7 +45,7 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
 
   const hasBothPins = userLat != null && userLng != null;
 
-  // Fetch walking route between user and attraction, render it on the map
+  // Fetch and draw the walking route between user and attraction
   useEffect(() => {
     if (!isLoaded || !hasBothPins) {
       setWalkingMinutes(null);
@@ -70,7 +70,6 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
         return;
       }
 
-      // Request walking directions from Google
       const directionsService = new google.maps.DirectionsService();
       directionsService.route(
         {
@@ -84,7 +83,6 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
             if (rendererRef.current) {
               rendererRef.current.setMap(null);
             }
-            // Draw the route polyline on the map
             rendererRef.current = new google.maps.DirectionsRenderer({
               map: mapRef.current!,
               suppressMarkers: true,

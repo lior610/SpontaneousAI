@@ -3,7 +3,6 @@ import * as usersController from '../controllers/usersController.js';
 
 const router = express.Router();
 
-// Map routes to controller functions
 router.get('/', usersController.getUsers);
 router.get('/:id', usersController.getUserById);
 router.post('/', usersController.createUser);

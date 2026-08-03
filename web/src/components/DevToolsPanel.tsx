@@ -1,26 +1,26 @@
 import React, { useState } from 'react';
 import { showAppNotification } from '../services/notificationService';
 
-// A simple global state for dev tools
+// Global (non-React) state for dev tools, read directly by services
 export const devToolsState = {
   mockTimeEnabled: false,
   mockTime: new Date().toISOString(),
 };
 
-// Global interceptor for geolocation to allow live spoofing
+// Monkey-patch geolocation so DevTools can spoof live GPS updates
 const watchCallbacks = new Set<PositionCallback>();
 if ('geolocation' in navigator) {
   const originalWatch = navigator.geolocation.watchPosition;
   navigator.geolocation.watchPosition = function (success, error, options) {
     watchCallbacks.add(success);
     const id = originalWatch.call(navigator.geolocation, success, error, options);
-    // Simple hack to cleanup, though not strictly necessary for devtools
+    // Not a real cleanup path, just enough for devtools
     return id;
   };
 
   const originalClear = navigator.geolocation.clearWatch;
   navigator.geolocation.clearWatch = function (id) {
-    // We don't easily know which callback matches the ID, but it's just for devtools
+    // Can't map id back to a specific callback; doesn't matter for devtools
     return originalClear.call(navigator.geolocation, id);
   };
   
@@ -67,8 +67,7 @@ export function DevToolsPanel() {
       };
       
       (window as any).__MOCK_GPS = mockPos;
-      
-      // Trigger all registered watchers immediately
+
       watchCallbacks.forEach(cb => cb(mockPos));
       
       alert(`Simulated location set to ${lat}, ${lng}. \n(The geofence and tracking received this coordinate immediately).`);

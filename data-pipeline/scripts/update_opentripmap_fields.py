@@ -41,6 +41,8 @@ _load_env()
 
 import psycopg2
 
+from db_utils import get_db_config
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -48,18 +50,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_db_config() -> dict:
-    return {
-        "host": os.getenv("POSTGRES_HOST", "localhost"),
-        "port": int(os.getenv("POSTGRES_PORT", "5432")),
-        "database": os.getenv("POSTGRES_ATTRACTIONS_DB", "attractions"),
-        "user": os.getenv("POSTGRES_USER", "postgres"),
-        "password": os.getenv("POSTGRES_PASSWORD", "postgres"),
-    }
-
-
 def ensure_columns(conn) -> None:
-    """Add OpenTripMap columns if they don't exist."""
     with conn.cursor() as cur:
         cur.execute("""
             ALTER TABLE attractions ADD COLUMN IF NOT EXISTS popularity NUMERIC(4, 3);

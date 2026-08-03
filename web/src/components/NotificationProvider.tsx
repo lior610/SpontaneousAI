@@ -9,7 +9,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     // Listen for in-app fallback toasts
     const unsubscribe = subscribeToNotifications((title, body) => {
       setToast({ title, body, id: Date.now() });
-      // Auto-hide after 5 seconds
       setTimeout(() => {
         setToast((prev) => (prev?.id === Date.now() ? null : prev));
       }, 5000);

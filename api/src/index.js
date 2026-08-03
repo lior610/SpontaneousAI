@@ -9,7 +9,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Mount API routes
 app.use('/api', routes);
 
 // Root route so GET / returns something useful
@@ -56,13 +55,9 @@ app.get('/engine/health', async (req, res) => {
 
 app.get('/health', async (req, res) => {
   try {
-    // Test DB host connection (using default postgres database)
+    // DB host check uses the default postgres database, not a per-service one
     const dbTest = await testConnection();
-    
-    // Test Engine service is running
     const engineStatusResponse = await axios.get(`${ENGINE_URL}/status`);
-    
-    // Test Engine database connection
     const engineHealthResponse = await axios.get(`${ENGINE_URL}/health`);
     
     res.json({
