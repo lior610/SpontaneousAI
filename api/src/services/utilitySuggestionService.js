@@ -60,6 +60,7 @@ export async function refillAndGetUtility(tripId, category, coords, position, lo
     results: batch,
     currentIndex: 1,
     currentPlaceId: first.place_id || null,
+    position,
     storedAt: Date.now(),
   });
   return buildUtilityCard(first, position, category);
@@ -79,5 +80,6 @@ export function getNextUtilitySuggestion(tripId, position) {
   cached.currentIndex++;
   cached.currentPlaceId = util.place_id || null;
 
-  return { ...buildUtilityCard(util, position, cached.category), exhausted };
+  const displayPosition = position || cached.position || null;
+  return { ...buildUtilityCard(util, displayPosition, cached.category), exhausted };
 }

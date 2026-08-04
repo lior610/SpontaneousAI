@@ -1099,11 +1099,14 @@ export const getNextActivity = async (req, res) => {
         );
         const locationId = locationResult.rows.length > 0 ? locationResult.rows[0].id : 1;
 
+        const utilityCoords = (current_lat != null && current_lng != null)
+          ? { lat: current_lat, lng: current_lng }
+          : null;
         const utilityCard = await refillAndGetUtility(
           tripId,
           specificNeed,
-          { lat: current_lat, lng: current_lng },
-          position ? { lat: current_lat, lng: current_lng } : null,
+          utilityCoords,
+          utilityCoords,
           locationId,
           currentTimeObj.getHours()
         );
