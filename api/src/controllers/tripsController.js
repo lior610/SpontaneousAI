@@ -5,9 +5,7 @@
 import * as usersDb from '../db/usersConnection.js';
 import * as attractionsDb from '../db/attractionsConnection.js';
 import axios from 'axios';
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { join, dirname } from 'path';
+import { createRequire } from 'module';
 import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedding.js';
 import * as locationService from '../services/locationService.js';
 import { checkFoodIntercept, dismissFoodSuggestion, getCurrentFoodPlaceId, getNextFoodSuggestion, refillAndGetFood, clearLlmDeclineCooldown } from '../services/foodInterceptService.js';
@@ -15,13 +13,8 @@ import { getRecommendedStayMinutes } from '../services/recommendedStay.js';
 import { mapEngineAttractionToActivity } from '../utils/activityMapper.js';
 import { computeExpandedRange } from '../utils/walkingRange.js';
 
-const _fallbackCoordsRaw = JSON.parse(
-  readFileSync(
-    process.env.FALLBACK_COORDS_PATH ||
-      join(dirname(fileURLToPath(import.meta.url)), '../../../shared/fallback_coords.json'),
-    'utf8'
-  )
-);
+const require = createRequire(import.meta.url);
+const fallbackCoords = require(process.env.FALLBACK_COORDS_PATH || '../../../shared/fallback_coords.json');
 
 // If a visitor stays less than this fraction of the LLM-recommended duration,
 // we infer they didn't enjoy the attraction.
@@ -34,7 +27,7 @@ const WALK_MAX_KM = parseFloat(process.env.WALK_MAX_KM) || 20;
 
 function getFallbackCoords(destination) {
   const dest = (destination || '').toLowerCase();
-  for (const [key, pairs] of Object.entries(_fallbackCoordsRaw)) {
+  for (const [key, pairs] of Object.entries(fallbackCoords)) {
     if (dest.includes(key)) return { lat: pairs[0][0], lng: pairs[0][1] };
   }
   return null;
