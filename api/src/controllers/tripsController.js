@@ -16,7 +16,11 @@ import { mapEngineAttractionToActivity } from '../utils/activityMapper.js';
 import { computeExpandedRange } from '../utils/walkingRange.js';
 
 const _fallbackCoordsRaw = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../shared/fallback_coords.json'), 'utf8')
+  readFileSync(
+    process.env.FALLBACK_COORDS_PATH ||
+      join(dirname(fileURLToPath(import.meta.url)), '../../../shared/fallback_coords.json'),
+    'utf8'
+  )
 );
 
 // If a visitor stays less than this fraction of the LLM-recommended duration,
