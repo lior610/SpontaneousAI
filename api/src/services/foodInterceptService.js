@@ -86,6 +86,10 @@ export function clearLlmDeclineCooldown(tripId) {
   foodLlmDeclineCooldowns.delete(tripId);
 }
 
+export function getCurrentFoodPlaceId(tripId) {
+  return foodBatchCache.get(tripId)?.currentPlaceId ?? null;
+}
+
 export function getNextFoodSuggestion(tripId, position) {
   const foodPlace = getNextFoodFromBatch(tripId);
   if (!foodPlace || !foodPlace.name) return null;
@@ -97,8 +101,14 @@ export async function refillAndGetFood(tripId, trip, position) {
   if (!position) return null;
   const batch = await fetchFoodBatch(trip, position);
   if (batch.length === 0) return null;
-  foodBatchCache.set(tripId, { results: batch, currentIndex: 1, storedAt: Date.now() });
-  return buildFoodCard(batch[0], position);
+  const first = batch[0];
+  foodBatchCache.set(tripId, {
+    results: batch,
+    currentIndex: 1,
+    currentPlaceId: first.place_id || null,
+    storedAt: Date.now(),
+  });
+  return buildFoodCard(first, position);
 }
 
 function isInCooldown(tripId) {
@@ -227,6 +237,7 @@ function getNextFoodFromBatch(tripId) {
   if (!cached || cached.currentIndex >= cached.results.length) return null;
   const food = cached.results[cached.currentIndex];
   cached.currentIndex++;
+  cached.currentPlaceId = food.place_id || null;
   return food;
 }
 
@@ -285,7 +296,12 @@ export async function checkFoodIntercept(tripId, trip, position) {
       return { triggered: false };
     }
     console.log(`[FoodIntercept] Got ${batch.length} food suggestions, serving first`);
-    foodBatchCache.set(tripId, { results: batch, currentIndex: 1, storedAt: Date.now() });
+    foodBatchCache.set(tripId, {
+      results: batch,
+      currentIndex: 1,
+      currentPlaceId: batch[0].place_id || null,
+      storedAt: Date.now(),
+    });
 
     return { triggered: true, foodCard: buildFoodCard(batch[0], position) };
   } catch (err) {

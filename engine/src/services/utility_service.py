@@ -24,11 +24,11 @@ UTILITY_CATEGORY_MAP = {
 FOOD_CATEGORIES = {"food"}
 
 async def get_closest_utilities(
-    parent_category: str, 
-    lat: float, 
-    lng: float, 
+    parent_category: str,
+    lat: float,
+    lng: float,
     location_id: int,
-    current_hour: Optional[int] = None, 
+    current_hour: Optional[int] = None,
     limit: int = 5
 ) -> List[dict]:
     

@@ -5,21 +5,35 @@
 import * as usersDb from '../db/usersConnection.js';
 import * as attractionsDb from '../db/attractionsConnection.js';
 import axios from 'axios';
+import { createRequire } from 'module';
 import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedding.js';
 import * as locationService from '../services/locationService.js';
-import { checkFoodIntercept, dismissFoodSuggestion, getNextFoodSuggestion, refillAndGetFood, clearLlmDeclineCooldown } from '../services/foodInterceptService.js';
+import { checkFoodIntercept, dismissFoodSuggestion, getCurrentFoodPlaceId, getNextFoodSuggestion, refillAndGetFood, clearLlmDeclineCooldown } from '../services/foodInterceptService.js';
 import { getRecommendedStayMinutes } from '../services/recommendedStay.js';
 import { mapEngineAttractionToActivity } from '../utils/activityMapper.js';
 import { computeExpandedRange } from '../utils/walkingRange.js';
 
-// If a visitor stays less than this fraction of the LLM-recommended duration,
-// we infer they didn't enjoy the attraction.
-const STAY_DISLIKE_RATIO = parseFloat(process.env.STAY_DISLIKE_RATIO) || 0.5;
+const require = createRequire(import.meta.url);
+const fallbackCoords = require(process.env.FALLBACK_COORDS_PATH || '../../../shared/fallback_coords.json');
 
-// "Walk a bit further?" — how much to widen the walking radius (km) per request,
-// and the hard ceiling we never exceed (NUMERIC(4,2) column caps at 99.99).
+const ENGINE_HOST = (() => { const h = process.env.ENGINE_HOST || '127.0.0.1'; return h === 'localhost' ? '127.0.0.1' : h; })();
+const STAY_DISLIKE_RATIO = parseFloat(process.env.STAY_DISLIKE_RATIO) || 0.5;
 const WALK_EXPAND_STEP_KM = parseFloat(process.env.WALK_EXPAND_STEP_KM) || 1.0;
 const WALK_MAX_KM = parseFloat(process.env.WALK_MAX_KM) || 20;
+
+function recordFeedback(userId, tripId, placeId, action) {
+  return axios.post(`http://${ENGINE_HOST}:8000/recommendations/feedback`, {
+    user_id: userId, trip_id: tripId, place_id: placeId, action
+  });
+}
+
+function getFallbackCoords(destination) {
+  const dest = (destination || '').toLowerCase();
+  for (const [key, pairs] of Object.entries(fallbackCoords)) {
+    if (dest.includes(key)) return { lat: pairs[0][0], lng: pairs[0][1] };
+  }
+  return null;
+}
 
 // In-memory cache to hold arrays of recommendations returned by the Engine
 const tripRecommendationsCache = new Map();
@@ -917,13 +931,9 @@ export const completeTripActivity = async (req, res) => {
         }
 
         try {
-          const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
-          const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
           // Capture the engine response: on a 'liked' action it may include a
           // "because you liked X, you might also like Y" companion suggestion.
-          const feedbackRes = await axios.post(`http://${engineHost}:8000/recommendations/feedback`, {
-            user_id: userId, trip_id: tripId, place_id, action
-          });
+          const feedbackRes = await recordFeedback(userId, tripId, place_id, action);
           const cs = feedbackRes.data?.companion_suggestion;
           if (cs && cs.place_id) {
             companionSuggestion = {
@@ -1041,8 +1051,9 @@ export const getNextActivity = async (req, res) => {
     const trip = tripCheck.rows[0];
 
     const position = await locationService.getPosition(tripId);
-    const current_lat = position ? position.lat : null;
-    const current_lng = position ? position.lng : null;
+    const fallback = !position ? getFallbackCoords(trip.destination) : null;
+    const current_lat = position ? position.lat : (fallback ? fallback.lat : null);
+    const current_lng = position ? position.lng : (fallback ? fallback.lng : null);
 
     // Food intercept runs before normal recs — own try/catch so failures never block the flow
     const specificNeed = req.query.specific_need;
@@ -1057,9 +1068,6 @@ export const getNextActivity = async (req, res) => {
       }
     }
 
-    const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
-    const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
-    
     // Support DevTools time simulation
     const mockTimeStr = req.query.mock_time;
     const currentTimeObj = mockTimeStr ? new Date(mockTimeStr) : new Date();
@@ -1090,7 +1098,7 @@ export const getNextActivity = async (req, res) => {
         );
         const locationId = locationResult.rows.length > 0 ? locationResult.rows[0].id : 1;
 
-        const utilRes = await axios.post(`http://${engineHost}:8000/utilities/closest`, {
+        const utilRes = await axios.post(`http://${ENGINE_HOST}:8000/utilities/closest`, {
           parent_category: specificNeed,
           lat: current_lat,
           lng: current_lng,
@@ -1139,7 +1147,7 @@ export const getNextActivity = async (req, res) => {
       freshBatch = true;
       console.log(`[API] Cache ${!cached ? 'empty' : 'exhausted'} for trip ${tripId}, fetching from engine...`);
       try {
-        const recRes = await axios.post(`http://${engineHost}:8000/recommendations/`, {
+        const recRes = await axios.post(`http://${ENGINE_HOST}:8000/recommendations/`, {
           user_id: trip.user_id,
           trip_id: tripId,
           current_location: { lat: current_lat, lng: current_lng },
@@ -1239,13 +1247,8 @@ export const skipTripActivity = async (req, res) => {
     if (tripCheck.rowCount === 0) return res.status(404).json({ error: 'Trip not found' });
     const userId = tripCheck.rows[0].user_id;
 
-    const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
-    const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
-
     try {
-      await axios.post(`http://${engineHost}:8000/recommendations/feedback`, {
-        user_id: userId, trip_id: tripId, place_id, action: 'skipped'
-      });
+      await recordFeedback(userId, tripId, place_id, 'skipped');
     } catch (err) {
       console.error("Error sending skip feedback to engine:", err.message);
     }
@@ -1261,7 +1264,17 @@ export const dismissFoodIntercept = async (req, res) => {
     const tripId = parseInt(req.params.id, 10);
     if (isNaN(tripId) || tripId <= 0) return res.status(400).json({ error: 'Invalid trip ID' });
 
+    const skippedPlaceId = getCurrentFoodPlaceId(tripId);
     dismissFoodSuggestion(tripId);
+
+    if (skippedPlaceId) {
+      const tripRow = await usersDb.query('SELECT user_id FROM trips WHERE trip_id = $1', [tripId]);
+      if (tripRow.rows.length > 0) {
+        recordFeedback(tripRow.rows[0].user_id, tripId, skippedPlaceId, 'skipped')
+          .catch(err => console.error('[FoodIntercept] Failed to record dismiss skip:', err.message));
+      }
+    }
+
     const cooldownMs = parseInt(process.env.FOOD_COOLDOWN_MS || '3600000', 10);
     res.json({ ok: true, cooldown_until: new Date(Date.now() + cooldownMs).toISOString() });
   } catch (error) {
@@ -1274,15 +1287,25 @@ export const nextFoodSuggestion = async (req, res) => {
     const tripId = parseInt(req.params.id, 10);
     if (isNaN(tripId) || tripId <= 0) return res.status(400).json({ error: 'Invalid trip ID' });
 
+    const skippedPlaceId = getCurrentFoodPlaceId(tripId);
+
     const position = await locationService.getPosition(tripId);
+    const tripRow = await usersDb.query('SELECT * FROM trips WHERE trip_id = $1', [tripId]);
+    if (tripRow.rows.length === 0) return res.status(404).json({ error: 'Trip not found' });
+    const trip = tripRow.rows[0];
+
     let foodCard = getNextFoodSuggestion(tripId, position);
+
+    if (skippedPlaceId) {
+      const skipPromise = recordFeedback(trip.user_id, tripId, skippedPlaceId, 'skipped')
+        .catch(err => console.error('[FoodIntercept] Failed to record refresh skip:', err.message));
+      // Await skip before refilling so the engine excludes the just-skipped place.
+      if (!foodCard) await skipPromise;
+    }
 
     // Batch exhausted — fetch a fresh one from the engine
     if (!foodCard) {
-      const tripRow = await usersDb.query('SELECT * FROM trips WHERE trip_id = $1', [tripId]);
-      if (tripRow.rows.length > 0) {
-        foodCard = await refillAndGetFood(tripId, tripRow.rows[0], position);
-      }
+      foodCard = await refillAndGetFood(tripId, trip, position);
     }
 
     if (!foodCard) {
