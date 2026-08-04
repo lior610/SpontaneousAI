@@ -5,12 +5,19 @@
 import * as usersDb from '../db/usersConnection.js';
 import * as attractionsDb from '../db/attractionsConnection.js';
 import axios from 'axios';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { join, dirname } from 'path';
 import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedding.js';
 import * as locationService from '../services/locationService.js';
 import { checkFoodIntercept, dismissFoodSuggestion, getCurrentFoodPlaceId, getNextFoodSuggestion, refillAndGetFood, clearLlmDeclineCooldown } from '../services/foodInterceptService.js';
 import { getRecommendedStayMinutes } from '../services/recommendedStay.js';
 import { mapEngineAttractionToActivity } from '../utils/activityMapper.js';
 import { computeExpandedRange } from '../utils/walkingRange.js';
+
+const _fallbackCoordsRaw = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../shared/fallback_coords.json'), 'utf8')
+);
 
 // If a visitor stays less than this fraction of the LLM-recommended duration,
 // we infer they didn't enjoy the attraction.
@@ -20,6 +27,14 @@ const STAY_DISLIKE_RATIO = parseFloat(process.env.STAY_DISLIKE_RATIO) || 0.5;
 // and the hard ceiling we never exceed (NUMERIC(4,2) column caps at 99.99).
 const WALK_EXPAND_STEP_KM = parseFloat(process.env.WALK_EXPAND_STEP_KM) || 1.0;
 const WALK_MAX_KM = parseFloat(process.env.WALK_MAX_KM) || 20;
+
+function getFallbackCoords(destination) {
+  const dest = (destination || '').toLowerCase();
+  for (const [key, pairs] of Object.entries(_fallbackCoordsRaw)) {
+    if (dest.includes(key)) return { lat: pairs[0][0], lng: pairs[0][1] };
+  }
+  return null;
+}
 
 // In-memory cache to hold arrays of recommendations returned by the Engine
 const tripRecommendationsCache = new Map();
@@ -1041,8 +1056,9 @@ export const getNextActivity = async (req, res) => {
     const trip = tripCheck.rows[0];
 
     const position = await locationService.getPosition(tripId);
-    const current_lat = position ? position.lat : null;
-    const current_lng = position ? position.lng : null;
+    const fallback = !position ? getFallbackCoords(trip.destination) : null;
+    const current_lat = position ? position.lat : (fallback ? fallback.lat : null);
+    const current_lng = position ? position.lng : (fallback ? fallback.lng : null);
 
     // Food intercept runs before normal recs — own try/catch so failures never block the flow
     const specificNeed = req.query.specific_need;
@@ -1303,8 +1319,7 @@ export const nextFoodSuggestion = async (req, res) => {
         user_id: trip.user_id, trip_id: tripId, place_id: skippedPlaceId, action: 'skipped'
       }).catch(err => console.error('[FoodIntercept] Failed to record refresh skip:', err.message));
 
-      // When the batch is exhausted we're about to refill from the engine — wait for the
-      // skip to land in the DB first so the new batch doesn't include the just-skipped place.
+      // Await skip before refilling so the engine excludes the just-skipped place.
       if (!foodCard) await skipPromise;
     }
 

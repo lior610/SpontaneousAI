@@ -1,16 +1,12 @@
+import json
+import os
 from typing import Dict, List, Tuple
 
+_json_path = os.path.join(os.path.dirname(__file__), "../../../shared/fallback_coords.json")
+
+with open(_json_path) as _f:
+    _raw = json.load(_f)
+
 FALLBACK_COORDS: Dict[str, List[Tuple[float, float]]] = {
-    "new york": [
-        (40.7580, -73.9855),  # Times Square
-        (40.7812, -73.9665),  # Central Park
-    ],
-    "tel aviv": [
-        (32.0780, 34.7742),  # Dizengoff Square
-        (32.0686, 34.7700),  # Nahalat Binyamin
-    ],
-    "london": [
-        (51.5136, -0.1365),  # Soho
-        (51.5117, -0.1240),  # Covent Garden
-    ],
+    k: [tuple(pair) for pair in v] for k, v in _raw.items()
 }
