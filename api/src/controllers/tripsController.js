@@ -1294,15 +1294,19 @@ export const nextFoodSuggestion = async (req, res) => {
     if (tripRow.rows.length === 0) return res.status(404).json({ error: 'Trip not found' });
     const trip = tripRow.rows[0];
 
+    let foodCard = getNextFoodSuggestion(tripId, position);
+
     if (skippedPlaceId) {
       const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
       const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
-      axios.post(`http://${engineHost}:8000/recommendations/feedback`, {
+      const skipPromise = axios.post(`http://${engineHost}:8000/recommendations/feedback`, {
         user_id: trip.user_id, trip_id: tripId, place_id: skippedPlaceId, action: 'skipped'
       }).catch(err => console.error('[FoodIntercept] Failed to record refresh skip:', err.message));
-    }
 
-    let foodCard = getNextFoodSuggestion(tripId, position);
+      // When the batch is exhausted we're about to refill from the engine — wait for the
+      // skip to land in the DB first so the new batch doesn't include the just-skipped place.
+      if (!foodCard) await skipPromise;
+    }
 
     // Batch exhausted — fetch a fresh one from the engine
     if (!foodCard) {
