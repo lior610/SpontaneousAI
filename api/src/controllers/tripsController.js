@@ -9,6 +9,7 @@ import { createRequire } from 'module';
 import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedding.js';
 import * as locationService from '../services/locationService.js';
 import { checkFoodIntercept, dismissFoodSuggestion, getCurrentFoodPlaceId, getNextFoodSuggestion, refillAndGetFood, clearLlmDeclineCooldown } from '../services/foodInterceptService.js';
+import { refillAndGetUtility, getNextUtilitySuggestion } from '../services/utilitySuggestionService.js';
 import { getRecommendedStayMinutes } from '../services/recommendedStay.js';
 import { mapEngineAttractionToActivity } from '../utils/activityMapper.js';
 import { computeExpandedRange } from '../utils/walkingRange.js';
@@ -1098,36 +1099,16 @@ export const getNextActivity = async (req, res) => {
         );
         const locationId = locationResult.rows.length > 0 ? locationResult.rows[0].id : 1;
 
-        const utilRes = await axios.post(`http://${ENGINE_HOST}:8000/utilities/closest`, {
-          parent_category: specificNeed,
-          lat: current_lat,
-          lng: current_lng,
-          location_id: locationId,
-          current_hour: currentTimeObj.getHours(),
-          limit: 1
-        });
-
-        const utilList = utilRes.data;
-        if (utilList && utilList.length > 0) {
-          const attr = utilList[0];
-          return res.json({
-            activity: {
-              id: attr.place_id || attr.activity_id || 'util-1',
-              title: attr.name,
-              description: attr.description || `A nearby location matching your immediate need for ${specificNeed}.`,
-              image: '',
-              rating: null,
-              reviewCount: null,
-              estimatedTime: attr.hours || '1 hour',
-              cost: attr.budget ? `$${attr.budget}` : '$$',
-              category: attr.categories && attr.categories.length > 0 ? attr.categories[0].toLowerCase() : 'general',
-              address: attr.address,
-              lat: attr.latitude,
-              lng: attr.longitude,
-              completed: false
-            },
-            userLocation: position ? { lat: current_lat, lng: current_lng } : null
-          });
+        const utilityCard = await refillAndGetUtility(
+          tripId,
+          specificNeed,
+          { lat: current_lat, lng: current_lng },
+          position ? { lat: current_lat, lng: current_lng } : null,
+          locationId,
+          currentTimeObj.getHours()
+        );
+        if (utilityCard) {
+          return res.json(utilityCard);
         }
       } catch (err) {
         console.error("Utility fetch failed:", err.message);
@@ -1313,6 +1294,24 @@ export const nextFoodSuggestion = async (req, res) => {
     }
 
     res.json(foodCard);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const nextUtilitySuggestion = async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.id, 10);
+    if (isNaN(tripId) || tripId <= 0) return res.status(400).json({ error: 'Invalid trip ID' });
+
+    const position = await locationService.getPosition(tripId);
+    const utilityCard = getNextUtilitySuggestion(tripId, position);
+
+    if (!utilityCard) {
+      return res.status(404).json({ error: 'No utility suggestions available' });
+    }
+
+    res.json(utilityCard);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

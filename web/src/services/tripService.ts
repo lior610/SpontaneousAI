@@ -315,6 +315,23 @@ export async function fetchNextFoodSuggestion(tripId: number): Promise<NextActiv
   };
 }
 
+export async function fetchNextUtilitySuggestion(tripId: number): Promise<NextActivityResult> {
+  if (!tripId) return { activity: null, userLocation: null };
+  const res = await fetch(`${API_BASE}/api/trips/${tripId}/utility/next`);
+  if (!res.ok) {
+    if (res.status === 404) return { activity: null, userLocation: null };
+    const text = await res.text().catch(() => '');
+    throw new Error(`Failed to fetch next utility suggestion (${res.status}): ${text || res.statusText}`);
+  }
+  const data = await res.json();
+  return {
+    activity: data.activity || null,
+    userLocation: data.userLocation || null,
+    card_type: data.card_type,
+    exhausted: data.exhausted,
+  };
+}
+
 export interface CompletedActivityLog {
   id: number;
   trip_id: number;
