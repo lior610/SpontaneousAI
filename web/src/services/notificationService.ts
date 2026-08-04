@@ -26,7 +26,6 @@ export function subscribeToNotifications(listener: NotificationListener) {
 }
 
 export async function showAppNotification(title: string, body: string, data?: any) {
-  // Always trigger in-app listeners (useful for fallback or if OS blocks native)
   listeners.forEach((fn) => fn(title, body, data));
 
   if (!('Notification' in window)) {
@@ -40,7 +39,7 @@ export async function showAppNotification(title: string, body: string, data?: an
     try {
       const notification = new Notification(title, {
         body,
-        icon: '/logo.svg', // Fixed icon path
+        icon: '/logo.svg',
         data,
       });
 
