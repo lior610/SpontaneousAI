@@ -12,7 +12,7 @@ from src.services.geo_utils import haversine
 # Maps a parent category (what the user asks for) to the exact DB category strings.
 # "food" is also used by cluster_queries.py to exclude food from regular recommendations.
 UTILITY_CATEGORY_MAP = {
-    "pharmacy": ['Pharmacy', 'Drugstore', 'Health and Medicine', 'Eyecare Store', 'Cosmetics Store', 'Health and Beauty'],
+    "pharmacy": ['Pharmacy', 'Drugstore', 'Health and Medicine', 'Eyecare Store', 'Health and Beauty'],
     "medical": ['Hospital', 'Medical Center', "Doctor's Office"],
     "grocery": ['Grocery Store', 'Organic Grocery', 'Big Box Store', 'Fruit and Vegetable Store', 'Butcher', 'Cheese Store', 'Food and Beverage Retail', 'Dairy Store', 'Imported Food Store', 'Supermarket', 'Health Food Store'],
     "convenience": ['Convenience Store', 'Snack Place', 'Newsstand', 'Newsagent', 'Discount Store', 'Liquor Store', 'Miscellaneous Store', 'Department Store', 'Retail', 'Stationery Store', 'Post Office', 'Smoke Shop', 'Florist', 'Hardware Store'],

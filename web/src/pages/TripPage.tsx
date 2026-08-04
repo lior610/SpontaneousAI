@@ -343,7 +343,7 @@ export function TripPage() {
       const result = await fetchNextUtilitySuggestion(tripId);
       if (result.activity) {
         if (result.exhausted) {
-          showAppNotification('You\'ve seen all options nearby', '');
+          showAppNotification('You\'ve seen all options nearby', 'Showing all places from the beginning');
         }
         applyActivityResult(result);
       }

@@ -1147,10 +1147,7 @@ export const getNextActivity = async (req, res) => {
     }
 
     if (!cached || !cached.results || cached.results.length === 0) {
-      // Nothing left within the current walking radius. This is usually a
-      // reachability limit, not a finished trip — let the client offer to widen
-      // the radius (see expandWalkingRange). We return 200 with a flag so the UI
-      // can distinguish "none in range now" from "you've seen everything".
+      // Nothing left within the current walking radius.
       return res.json({
         activity: null,
         userLocation: position ? { lat: current_lat, lng: current_lng } : null,
