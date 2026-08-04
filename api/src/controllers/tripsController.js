@@ -7,7 +7,7 @@ import * as attractionsDb from '../db/attractionsConnection.js';
 import axios from 'axios';
 import { schedulePreferenceEmbeddingRebuild } from '../services/preferenceEmbedding.js';
 import * as locationService from '../services/locationService.js';
-import { checkFoodIntercept, dismissFoodSuggestion, getNextFoodSuggestion, refillAndGetFood, clearLlmDeclineCooldown } from '../services/foodInterceptService.js';
+import { checkFoodIntercept, dismissFoodSuggestion, getCurrentFoodPlaceId, getNextFoodSuggestion, refillAndGetFood, clearLlmDeclineCooldown } from '../services/foodInterceptService.js';
 import { getRecommendedStayMinutes } from '../services/recommendedStay.js';
 import { mapEngineAttractionToActivity } from '../utils/activityMapper.js';
 import { computeExpandedRange } from '../utils/walkingRange.js';
@@ -1261,7 +1261,20 @@ export const dismissFoodIntercept = async (req, res) => {
     const tripId = parseInt(req.params.id, 10);
     if (isNaN(tripId) || tripId <= 0) return res.status(400).json({ error: 'Invalid trip ID' });
 
+    const skippedPlaceId = getCurrentFoodPlaceId(tripId);
     dismissFoodSuggestion(tripId);
+
+    if (skippedPlaceId) {
+      const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
+      const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
+      const tripRow = await usersDb.query('SELECT user_id FROM trips WHERE trip_id = $1', [tripId]);
+      if (tripRow.rows.length > 0) {
+        axios.post(`http://${engineHost}:8000/recommendations/feedback`, {
+          user_id: tripRow.rows[0].user_id, trip_id: tripId, place_id: skippedPlaceId, action: 'skipped'
+        }).catch(err => console.error('[FoodIntercept] Failed to record dismiss skip:', err.message));
+      }
+    }
+
     const cooldownMs = parseInt(process.env.FOOD_COOLDOWN_MS || '3600000', 10);
     res.json({ ok: true, cooldown_until: new Date(Date.now() + cooldownMs).toISOString() });
   } catch (error) {
@@ -1274,15 +1287,26 @@ export const nextFoodSuggestion = async (req, res) => {
     const tripId = parseInt(req.params.id, 10);
     if (isNaN(tripId) || tripId <= 0) return res.status(400).json({ error: 'Invalid trip ID' });
 
+    const skippedPlaceId = getCurrentFoodPlaceId(tripId);
+
     const position = await locationService.getPosition(tripId);
+    const tripRow = await usersDb.query('SELECT * FROM trips WHERE trip_id = $1', [tripId]);
+    if (tripRow.rows.length === 0) return res.status(404).json({ error: 'Trip not found' });
+    const trip = tripRow.rows[0];
+
+    if (skippedPlaceId) {
+      const rawHost = process.env.ENGINE_HOST || '127.0.0.1';
+      const engineHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
+      axios.post(`http://${engineHost}:8000/recommendations/feedback`, {
+        user_id: trip.user_id, trip_id: tripId, place_id: skippedPlaceId, action: 'skipped'
+      }).catch(err => console.error('[FoodIntercept] Failed to record refresh skip:', err.message));
+    }
+
     let foodCard = getNextFoodSuggestion(tripId, position);
 
     // Batch exhausted — fetch a fresh one from the engine
     if (!foodCard) {
-      const tripRow = await usersDb.query('SELECT * FROM trips WHERE trip_id = $1', [tripId]);
-      if (tripRow.rows.length > 0) {
-        foodCard = await refillAndGetFood(tripId, tripRow.rows[0], position);
-      }
+      foodCard = await refillAndGetFood(tripId, trip, position);
     }
 
     if (!foodCard) {
