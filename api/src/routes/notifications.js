@@ -29,7 +29,7 @@ router.get('/stream', (req, res) => {
     'X-Accel-Buffering': 'no',
   });
 
-  // Write an initial comment to establish the connection
+  // SSE comment line just to open the connection
   res.write(': connected\n\n');
   if (typeof res.flush === 'function') {
     res.flush();

@@ -39,26 +39,14 @@ class FeedbackService:
         place_id: str,
         action: str
     ) -> Dict[str, Any]:
-        """
-        Record user interaction and update preference embeddings if applicable.
-        
-        Args:
-            user_id: ID of the user
-            trip_id: Current trip context
-            place_id: ID of the interacting attraction
-            action: Action taken (e.g. 'liked', 'skipped', 'visited')
-            
-        Returns:
-            Dictionary with operation status
-        """
+        """Record user interaction and update preference embeddings if applicable."""
         if action not in ("liked", "skipped", "visited"):
             raise ValueError("Invalid action. Allowed: 'liked', 'skipped', 'visited'.")
             
         try:
             with get_db_connection() as conn:
                 record_feedback(conn, trip_id, place_id, action)
-                # Commit manually or ideally we rely on the context manager config depending
-                # on usersConnection.py setup.
+                # Explicit commit; usersConnection's context manager may or may not auto-commit.
                 conn.commit()
                 
             logger.info(f"Recorded feedback: User {user_id}, Trip {trip_id}, place {place_id} -> {action}")

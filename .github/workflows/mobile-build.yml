@@ -1,4 +1,4 @@
-name: Build Mobile App Artifacts (Android & iOS)
+name: Build Mobile App Artifacts (Android)
 
 on:
   workflow_dispatch:
@@ -57,51 +57,4 @@ jobs:
         with:
           name: SpontaneousAI-Android-APK
           path: web/android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-
-  build-ios:
-    name: Build iOS Application
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'npm'
-
-      - name: Install Web Dependencies
-        run: |
-          cd web
-          npm ci || npm install
-
-      - name: Build Web Application
-        env:
-          VITE_API_URL: ${{ github.event.inputs.api_url }}
-        run: |
-          cd web
-          npm run build
-
-      - name: Capacitor Sync
-        run: |
-          cd web
-          npx cap sync ios
-
-      - name: Build & Package iOS Unsigned IPA
-        run: |
-          cd web/ios/App
-          xcodebuild -project App.xcodeproj -scheme App -sdk iphoneos -configuration Debug CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -derivedDataPath build
-          cd build/Build/Products/Debug-iphoneos
-          mkdir Payload
-          cp -r App.app Payload/
-          zip -r SpontaneousAI.ipa Payload
-
-      - name: Upload iOS App Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SpontaneousAI-iOS-IPA
-          path: web/ios/App/build/Build/Products/Debug-iphoneos/SpontaneousAI.ipa
           if-no-files-found: error

@@ -33,12 +33,9 @@ export interface GeofenceOptions {
 }
 
 /**
- * Watches the user's GPS position relative to a target attraction and fires
- * onArrive when they enter the arrival radius, then onDepart once they leave
- * the (larger) departure radius. Departure only fires after an arrival, so the
- * time between the two callbacks is the actual dwell time at the attraction.
- *
- * Returns a cleanup function that stops watching.
+ * Fires onArrive when the user enters the arrival radius, then onDepart once they
+ * leave the larger departure radius — departure only fires after arrival, so the
+ * gap between the two is the actual dwell time at the attraction.
  */
 export function watchArrivalDeparture(target: Coords, opts: GeofenceOptions = {}): () => void {
   const arriveRadiusM = opts.arriveRadiusM ?? 120;
@@ -48,7 +45,6 @@ export function watchArrivalDeparture(target: Coords, opts: GeofenceOptions = {}
   let hasArrived = false;
   let departed = false;
 
-  // Handler callback for position updates
   const handlePosition = (coords: Coords) => {
     opts.onPosition?.(coords);
     const d = distanceMeters(coords, target);

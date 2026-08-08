@@ -1,5 +1,4 @@
-// Base notification service for SpontaneousAI
-// Wraps the browser Notification API and provides fallbacks
+// Wraps the browser Notification API with an in-app fallback
 
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
   if (!('Notification' in window)) {

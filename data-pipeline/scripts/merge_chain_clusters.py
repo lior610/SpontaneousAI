@@ -33,6 +33,8 @@ except ImportError:
 
 import psycopg2
 
+from db_utils import get_db_config
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -40,18 +42,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_db_config() -> dict:
-    return {
-        "host": os.getenv("POSTGRES_HOST", "localhost"),
-        "port": int(os.getenv("POSTGRES_PORT", "5432")),
-        "database": os.getenv("POSTGRES_ATTRACTIONS_DB", "attractions"),
-        "user": os.getenv("POSTGRES_USER", "postgres"),
-        "password": os.getenv("POSTGRES_PASSWORD", "postgres"),
-    }
-
-
 def normalize_name(name: str) -> str:
-    """Normalize name for grouping (case-insensitive, stripped)."""
+    """Normalize name for grouping."""
     if not name or not isinstance(name, str):
         return ""
     return name.strip().lower()
@@ -83,8 +75,8 @@ def main():
                 """)
             rows = cur.fetchall()
 
-    # Group by (location_id, normalized_name) -> [(place_id, location_cluster_id), ...]
-    key_to_places = {}  # (location_id, name_key) -> [(place_id, location_cluster_id), ...]
+    # key_to_places: (location_id, name_key) -> [(place_id, location_cluster_id), ...]
+    key_to_places = {}
     for place_id, name, location_id, location_cluster_id in rows:
         key = normalize_name(name or "")
         if not key:

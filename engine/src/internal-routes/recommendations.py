@@ -163,7 +163,7 @@ async def get_recommendations(req: RecommendationRequest):
         responses = []
         for c in ranked_candidates:
             responses.append(RecommendationResponse(
-                attraction=c, # Note: Pydantic will coerce the dict to AttractionResponse
+                attraction=c, # Pydantic coerces the dict to AttractionResponse
                 score=c.get('final_score', 0.0),
                 reasoning=str(c.get('scoring_breakdown', {})),
                 distance_km=c.get('distance_km'),

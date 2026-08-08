@@ -1,7 +1,3 @@
-/**
- * Trips Controller - Handles trip-related request/response logic
- */
-
 import * as usersDb from '../db/usersConnection.js';
 import * as attractionsDb from '../db/attractionsConnection.js';
 import axios from 'axios';
@@ -124,7 +120,6 @@ export const getTripById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate id is a number
     const tripId = parseInt(id, 10);
     if (isNaN(tripId) || tripId <= 0) {
       return res.status(400).json({
@@ -132,7 +127,6 @@ export const getTripById = async (req, res) => {
       });
     }
 
-    // Query trip from database
     const result = await usersDb.query(
       `SELECT trip_id, user_id, destination, start_date, end_date, budget,
          preference_breakdown, max_walking_distance, preferred_transportation,
@@ -195,7 +189,6 @@ export const createTrip = async (req, res) => {
       with_kids
     } = req.body;
 
-    // Validate required fields
     if (!user_id || !destination || !start_date || !end_date) {
       return res.status(400).json({
         error: 'user_id, destination, start_date, and end_date are required'
@@ -391,7 +384,6 @@ export const updateTrip = async (req, res) => {
       (k) => req.body[k] !== undefined,
     );
 
-    // Validate id is a number
     const tripId = parseInt(id, 10);
     if (isNaN(tripId) || tripId <= 0) {
       return res.status(400).json({
@@ -399,7 +391,6 @@ export const updateTrip = async (req, res) => {
       });
     }
 
-    // Check if trip exists
     const tripCheck = await usersDb.query(
       'SELECT trip_id FROM trips WHERE trip_id = $1',
       [tripId]
@@ -411,7 +402,7 @@ export const updateTrip = async (req, res) => {
       });
     }
 
-    // Build update query dynamically based on provided fields
+    // Dynamic update: only touch fields the caller actually sent
     const updates = [];
     const values = [];
     let paramIndex = 1;
@@ -526,7 +517,6 @@ export const updateTrip = async (req, res) => {
       paramIndex++;
     }
 
-    // Handle max_travel_time_min
     if (max_travel_time_min !== undefined) {
       if (max_travel_time_min !== null) {
         const travelTime = parseInt(max_travel_time_min, 10);
@@ -550,7 +540,6 @@ export const updateTrip = async (req, res) => {
       paramIndex++;
     }
 
-    // Handle coordinates
     if (current_lat !== undefined) {
       if (current_lat !== null) {
         const lat = parseFloat(current_lat);
@@ -584,14 +573,12 @@ export const updateTrip = async (req, res) => {
       paramIndex++;
     }
 
-    // Handle timezone
     if (timezone !== undefined) {
       updates.push(`timezone = $${paramIndex}`);
       values.push(timezone || null);
       paramIndex++;
     }
 
-    // Handle local_hour_last_seen
     if (local_hour_last_seen !== undefined) {
       if (local_hour_last_seen !== null) {
         const hour = parseInt(local_hour_last_seen, 10);
@@ -609,7 +596,6 @@ export const updateTrip = async (req, res) => {
       paramIndex++;
     }
 
-    // Handle day_of_week_last_seen
     if (day_of_week_last_seen !== undefined) {
       if (day_of_week_last_seen !== null) {
         const day = parseInt(day_of_week_last_seen, 10);
@@ -627,14 +613,13 @@ export const updateTrip = async (req, res) => {
       paramIndex++;
     }
 
-    // Check if any fields to update
     if (updates.length === 0) {
       return res.status(400).json({
         error: 'No fields provided to update. Provide at least one updatable trip field.'
       });
     }
 
-    // If both dates are being updated, validate the range
+    // Both dates updated together: validate the range directly
     let finalStartDate;
     let finalEndDate;
     if (start_date !== undefined && end_date !== undefined) {
@@ -695,13 +680,9 @@ export const updateTrip = async (req, res) => {
       }
     }
 
-    // Add updated_at timestamp
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
-
-    // Add trip_id to values for WHERE clause
     values.push(tripId);
 
-    // Execute update
     const updateQuery = `
       UPDATE trips 
       SET ${updates.join(', ')} 
@@ -918,7 +899,7 @@ export const completeTripActivity = async (req, res) => {
 
     const row = result.rows[0];
 
-    // Engine Feedback & Coordinations update logic
+    // Forward the outcome to the engine; it may hand back a companion suggestion
     let companionSuggestion = null;
     if (place_id) {
       const tripRow = await usersDb.query('SELECT user_id FROM trips WHERE trip_id = $1', [tripId]);
@@ -1073,10 +1054,9 @@ export const getNextActivity = async (req, res) => {
     const mockTimeStr = req.query.mock_time;
     const currentTimeObj = mockTimeStr ? new Date(mockTimeStr) : new Date();
 
-    // An explicit "food" need enters full food-break mode: this reuses the food
-    // intercept batch/cache so the served card is a food_intercept card and the
-    // frontend's "suggest a different restaurant" / dismiss flow works exactly as it
-    // does for an auto-triggered food break — not a one-off utility card.
+    // Explicit "food" need reuses the food intercept batch/cache so the card is a real
+    // food_intercept card — the frontend's dismiss/suggest-another flow works the same
+    // as for an auto-triggered break, not a one-off utility card.
     if (specificNeed === 'food') {
       try {
         const foodCard = await refillAndGetFood(tripId, trip, position);
@@ -1179,9 +1159,8 @@ export const getNextActivity = async (req, res) => {
   }
 };
 
-// Widen the trip's walking radius when nothing is reachable within the current
-// one. Persists the new max_walking_distance to the DB and clears the cached
-// recommendation batch so the next fetch uses the larger radius.
+// Persists the new max_walking_distance and clears the cached recommendation batch
+// so the next fetch uses the wider radius.
 export const expandWalkingRange = async (req, res) => {
   try {
     const tripId = parseInt(req.params.id, 10);

@@ -12,7 +12,6 @@ export function validate(lat, lng) {
   return errors.length ? errors : null;
 }
 
-// Update the trip's current position in the database
 export async function updatePosition(tripId, lat, lng) {
   const errors = validate(lat, lng);
   if (errors) throw new Error(errors.join('; '));
@@ -22,7 +21,7 @@ export async function updatePosition(tripId, lat, lng) {
   );
 }
 
-// Get the trip's current position, returns null if no coords are set
+// Returns null if no coords are set for this trip
 export async function getPosition(tripId) {
   const result = await usersDb.query(
     `SELECT current_lat, current_lng FROM trips WHERE trip_id = $1`,

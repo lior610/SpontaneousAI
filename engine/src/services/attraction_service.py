@@ -1,20 +1,4 @@
-"""
-Attraction Service - Business Logic Layer.
-
-This is the main entry point for attraction-related business logic.
-It orchestrates operations across multiple layers:
-- Embedding generation
-- Filter building
-- Search execution
-
-Flow: API Routes → Attraction Service → (Embedding Service, Vector Search) → Database
-
-Responsibilities:
-- Transform API requests into business operations
-- Build filters from user context
-- Orchestrate embedding generation and search
-- Handle business-level validation and logic
-"""
+"""Business logic layer for attractions - orchestrates embedding generation, filter building, and search."""
 
 import sys
 from pathlib import Path
@@ -31,38 +15,15 @@ from src.search.soft_filters import apply_soft_filters
 
 
 async def get_attraction_by_id(attraction_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Retrieve a single attraction by its ID.
-    
-    Args:
-        attraction_id: Unique identifier for the attraction
-        
-    Returns:
-        Attraction dictionary if found, None otherwise
-        
-    Note:
-        This is a stub - implementation needed
-    """
+    """Stub - not yet implemented."""
     # TODO: Implement database query to fetch by ID
     return None
 
 
 async def create_attraction(attraction_data: dict) -> dict:
     """
-    Create a new attraction with generated embedding.
-    
-    This is typically called from the data pipeline when scraping new attractions.
-    It generates an embedding from the attraction's text content and prepares
-    the data for storage.
-    
-    Args:
-        attraction_data: Dictionary containing attraction information
-        
-    Returns:
-        Dictionary with attraction data including generated embedding
-        
-    Note:
-        Database storage is not yet implemented - this is a stub
+    Typically called from the data pipeline when scraping new attractions.
+    Database storage is not yet implemented - returns the dict with embedding attached.
     """
     # Build text for embedding from relevant fields (description; get-vibe outputs embedding_desc, mapped on load)
     attraction_text = attraction_data.get('description') or attraction_data.get('name', '')
@@ -80,25 +41,7 @@ async def search_attractions(
     min_similarity: Optional[float] = None,
     context: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
-    """
-    Search for attractions using semantic similarity.
-    
-    This is the main search entrypoint. It:
-    1. Generates an embedding from the query text  - When he have embedding service, use it here
-    2. Builds hard filters from user context
-    3. Executes vector similarity search
-    4. Returns ranked results
-    
-    Args:
-        query_text: Natural language search query (e.g., "romantic dinner spots")
-        limit: Maximum number of results to return (default: 10)
-        min_similarity: Optional minimum similarity threshold (0-1)
-        context: Optional user context for filtering (city, country, is_open_now, etc.)
-        
-    Returns:
-        List of attraction dictionaries, sorted by similarity score (highest first)
-        
-    """
+    """Main search entrypoint: embed query, build hard filters, run vector search, apply soft filters."""
     # Step 1: Generate embedding from query text
     query_embedding = await generate_embedding(query_text)
     

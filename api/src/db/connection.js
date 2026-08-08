@@ -8,15 +8,11 @@ const pool = new Pool({
   database: process.env.POSTGRES_DB || 'postgres',
   user: process.env.POSTGRES_USER || 'postgres',
   password: process.env.POSTGRES_PASSWORD || 'postgres',
-  max: 20, // Maximum number of clients in the pool
+  max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: parseInt(process.env.PG_CONNECTION_TIMEOUT_MS || '15000', 10),
 });
 
-/**
- * Test database connection
- * @returns {Promise<Object>} Connection test result
- */
 export async function testConnection() {
   try {
     const result = await pool.query('SELECT NOW()');
@@ -26,15 +22,9 @@ export async function testConnection() {
   }
 }
 
-/**
- * Close all connections in the pool
- */
 export async function closePool() {
   await pool.end();
 }
 
-// Export the pool for advanced usage
 export { pool };
-
-// Default export
 export default pool;

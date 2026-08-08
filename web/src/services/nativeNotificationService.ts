@@ -2,9 +2,6 @@ import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 
-/**
- * Request notification permissions across native mobile and web platforms.
- */
 export async function requestNotificationPermission(): Promise<boolean> {
   if (Capacitor.isNativePlatform()) {
     try {
@@ -27,24 +24,18 @@ export async function requestNotificationPermission(): Promise<boolean> {
   return false;
 }
 
-/**
- * Trigger native haptic feedback (vibration).
- */
 export async function triggerHapticFeedback(): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     try {
       await Haptics.impact({ style: ImpactStyle.Heavy });
     } catch {
-      // Fallback
+      // no-op
     }
   } else if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
     navigator.vibrate([200, 100, 200]);
   }
 }
 
-/**
- * Send an arrival notification to the user (lock screen / status bar).
- */
 export async function sendArrivalNotification(title: string, body: string): Promise<void> {
   await triggerHapticFeedback();
 
@@ -71,9 +62,6 @@ export async function sendArrivalNotification(title: string, body: string): Prom
   }
 }
 
-/**
- * Send a departure notification when the user moves away from an attraction.
- */
 export async function sendDepartureNotification(title: string, body: string): Promise<void> {
   await triggerHapticFeedback();
 

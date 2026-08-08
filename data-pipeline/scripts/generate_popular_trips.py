@@ -2,22 +2,16 @@
 """
 Generate the popular-trips pool (one-time, grounded, persona-tagged).
 
-For every location in the attractions DB and every persona in personas.py, this
-asks an LLM (Google Gemini) to compose a handful of "popular routes" using ONLY
-the real attractions of that city. The returned place_ids are validated against
-the DB catalog (hallucinations dropped), then persisted into:
-    personas, popular_trips, popular_trip_attractions
+For every location + persona, asks Gemini for "popular routes" built ONLY from real
+attractions in that city; place_ids are validated against the DB catalog (hallucinations
+dropped) and written to personas, popular_trips, popular_trip_attractions. Trip embedding
+is the L2-normalized mean of member attraction embeddings (tie-break vector only); persona
+embedding is the persona description's embedding, matched against user preference vectors.
 
-Each popular trip's embedding is the L2-normalized mean of its member attraction
-embeddings (a theme vector, used only for tie-breaking at runtime). Persona
-embeddings (of the persona description) are the match vector against a user's
-preference vector.
-
-Idempotent per location: existing popular_trips for a location are deleted and
-regenerated on each run — UNLESS POPULAR_TRIPS_FILL_MISSING is set, in which
-case nothing is deleted and only personas with fewer than
-POPULAR_TRIPS_PER_PERSONA trips are topped up (useful when a single Gemini call
-failed or returned invalid routes and left a persona short).
+Regenerates a location's popular_trips from scratch each run (existing rows deleted first) —
+UNLESS POPULAR_TRIPS_FILL_MISSING is set, in which case nothing is deleted and only personas
+short of POPULAR_TRIPS_PER_PERSONA trips get topped up (for when a prior Gemini call failed
+or returned invalid routes and left a persona short).
 
 Usage:
     python data-pipeline/scripts/generate_popular_trips.py
@@ -36,8 +30,7 @@ Env vars:
     LOCATION_SLUG              - optional; restrict generation to one location
     POSTGRES_*                 - DB connection (see load_places_to_db.py)
 
-Loads project-root .env first, then data-pipeline/scrapers/.env for any
-missing keys (so GEMINI_* from the scrapers env is picked up automatically).
+Loads project-root .env first, then scrapers/.env for any missing keys (GEMINI_*).
 """
 import json
 import os
@@ -62,6 +55,7 @@ import psycopg2
 import requests
 
 from personas import PERSONAS
+from db_utils import get_db_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -77,16 +71,6 @@ MIN_STOPS = int(os.getenv("POPULAR_TRIP_MIN_STOPS", "4"))
 MAX_STOPS = int(os.getenv("POPULAR_TRIP_MAX_STOPS", "6"))
 CATALOG_LIMIT = int(os.getenv("POPULAR_TRIPS_CATALOG_LIMIT", "150"))
 FILL_MISSING = os.getenv("POPULAR_TRIPS_FILL_MISSING", "").strip().lower() in ("1", "true", "yes")
-
-
-def get_db_config() -> dict:
-    return {
-        "host": os.getenv("POSTGRES_HOST", "localhost"),
-        "port": int(os.getenv("POSTGRES_PORT", "5432")),
-        "database": os.getenv("POSTGRES_ATTRACTIONS_DB", "attractions"),
-        "user": os.getenv("POSTGRES_USER", "postgres"),
-        "password": os.getenv("POSTGRES_PASSWORD", "postgres"),
-    }
 
 
 def _format_embedding(embedding: List[float]) -> str:
@@ -417,8 +401,7 @@ def main():
                     validated = validate_trip(raw_trip, catalog_ids)
                     if validated:
                         valid_trips.append(validated)
-                # In fill mode never exceed the per-persona target, even if the
-                # LLM returned more routes than asked for.
+                # Cap at n_trips even if Gemini returned more than asked.
                 valid_trips = valid_trips[:n_trips]
 
                 all_ids = [pid for t in valid_trips for pid in t["place_ids"]]

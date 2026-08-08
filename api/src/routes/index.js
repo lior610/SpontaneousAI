@@ -7,7 +7,6 @@ import notificationsRouter from './notifications.js';
 
 const router = express.Router();
 
-// Mount route handlers
 router.use('/users', usersRouter);
 router.use('/trips', tripsRouter);
 router.use('/locations', locationsRouter);

@@ -1,37 +1,10 @@
-"""
-Hard Filters - SQL-level constraints for search queries.
-
-Hard filters are strict requirements that must be satisfied. They are applied
-as WHERE clauses in the database query, filtering results before they're returned.
-
-Examples:
-- Location: city, country
-- Availability: is_open_now
-- Required attributes: accessibility_features, age_min
-
-These filters reduce the search space at the database level.
-"""
+"""Hard filters - strict constraints applied as SQL WHERE clauses (location, availability, required attrs)."""
 from typing import Dict, Any
 
 
 def build_hard_filters(context: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Build hard filters dictionary from user context.
-    
-    Hard filters are strict constraints applied as SQL WHERE clauses.
-    They filter results at the database level before similarity ranking.
-    
-    Note: Filter keys must match database column names exactly.
-    
-    Args:
-        context: Dictionary containing user context (city, country, is_open_now, etc.)
-        
-    Returns:
-        Dictionary of filters to apply in database query (keys = column names)
-        
-    Examples:
-        >>> build_hard_filters({"city": "Paris", "is_open_now": True})
-        {"city": "Paris", "is_open_now": True}
+    Build the filters dict from user context. Keys must match DB column names exactly.
     """
     filters: Dict[str, Any] = {}
 

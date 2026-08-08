@@ -60,29 +60,17 @@ class RankingEngine:
         current_hour: Optional[int] = None,
         real_seen_categories: Optional[set] = None
     ) -> List[Dict[str, Any]]:
-        """
-        Rank the candidates based on contextual parameters.
-        
-        Args:
-            candidates: List of attractions from the Cluster Retrieval
-            user_lat: Current user latitude
-            user_lng: Current user longitude
-            max_walk_km: Maximum preferred walking distance
-            travel_style: 'budget', 'balanced', or 'premium'
-            current_hour: Current local hour (0-23)
-            
-        Returns:
-            Sorted list of attractions containing final breakdown scores.
-        """
+        """Rank candidates by weighted contextual score, then apply the diversity bonus."""
         if not candidates:
             return []
             
         seen_categories = set(real_seen_categories) if real_seen_categories else set()
         cluster_counts = {}
         
-        # We need to process diversity bonus dynamically, so we can't fully
-        # independent score. However, we'll do an initial pass for base scores.
-        
+        # Diversity bonus depends on processing order (seen_categories/cluster_counts
+        # accumulate as we go), so it can't be scored independently in one pass —
+        # base scores first, diversity bonus in a second pass below.
+
         for candidate in candidates:
             raw = compute_raw_scores(candidate, user_lat, user_lng, max_walk_km, travel_style, current_hour)
 

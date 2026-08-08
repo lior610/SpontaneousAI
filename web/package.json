@@ -9,19 +9,15 @@
     "preview": "vite preview",
     "cap:sync": "cap sync",
     "cap:build": "vite build && cap sync",
-    "cap:open:android": "cap open android",
-    "cap:open:ios": "cap open ios"
+    "cap:open:android": "cap open android"
   },
   "dependencies": {
     "@capacitor/core": "^8.4.2",
     "@capacitor/geolocation": "^8.2.0",
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/local-notifications": "^8.2.1",
-    "@capacitor/push-notifications": "^8.1.2",
-    "@capacitor/status-bar": "^8.0.3",
     "@radix-ui/react-slot": "^1.2.4",
     "@react-google-maps/api": "^2.20.8",
-    "axios": "^1.6.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -34,7 +30,6 @@
   "devDependencies": {
     "@capacitor/android": "^8.4.2",
     "@capacitor/cli": "^8.4.2",
-    "@capacitor/ios": "^8.4.2",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.2.1",

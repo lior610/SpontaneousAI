@@ -22,14 +22,12 @@ Env vars:
     ASSIGN_NOISE      - If 1, assign noise to nearest cluster (default: 1)
     POSTGRES_*        - DB connection
 """
-import json
 import os
 import sys
 import logging
 from pathlib import Path
 from typing import List, Optional, Tuple, Any
 
-# Add shared/python to path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "shared" / "python"))
 
@@ -43,21 +41,13 @@ except ImportError:
 import numpy as np
 import psycopg2
 
+from db_utils import get_db_config, parse_embedding
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-
-def get_db_config() -> dict:
-    return {
-        "host": os.getenv("POSTGRES_HOST", "localhost"),
-        "port": int(os.getenv("POSTGRES_PORT", "5432")),
-        "database": os.getenv("POSTGRES_ATTRACTIONS_DB", "attractions"),
-        "user": os.getenv("POSTGRES_USER", "postgres"),
-        "password": os.getenv("POSTGRES_PASSWORD", "postgres"),
-    }
 
 
 def get_location_ids(config: dict, location_slug: Optional[str] = None) -> List[Tuple[int, str]]:
@@ -94,14 +84,6 @@ def load_attractions_for_location(
             rows = cur.fetchall()
 
     place_ids = [str(row[0]) for row in rows]
-
-    def parse_embedding(emb):
-        if emb is None:
-            return None
-        if isinstance(emb, (list, np.ndarray)):
-            return np.asarray(emb, dtype=np.float32)
-        return np.array(json.loads(emb) if isinstance(emb, str) else list(emb), dtype=np.float32)
-
     embeddings = np.array([parse_embedding(row[1]) for row in rows], dtype=np.float32)
     logger.info(f"Loaded {len(place_ids)} attractions for location_id={location_id}")
     return place_ids, embeddings
@@ -188,9 +170,7 @@ def update_location_clusters(
 
     with psycopg2.connect(**config) as conn:
         with conn.cursor() as cur:
-            # Clear old location_clusters for this location
             cur.execute("DELETE FROM location_clusters WHERE location_id = %s", (location_id,))
-            # Insert new location_clusters
             for local_cluster_id in unique_labels:
                 cur.execute(
                     "INSERT INTO location_clusters (location_id, cluster_id) VALUES (%s, %s) RETURNING id",
@@ -205,7 +185,6 @@ def update_location_clusters(
             )
             lc_map = {row[1]: row[0] for row in cur.fetchall()}
 
-            # Update attractions
             updates = []
             for pid, l in zip(place_ids, labels):
                 lc_id = lc_map.get(int(l)) if l >= 0 else None

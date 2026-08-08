@@ -1,12 +1,8 @@
+// Maps an engine attraction (or companion suggestion) to the frontend Activity shape.
+// Shared by getNextActivity and the companion-suggestion passthrough so both produce
+// identical objects.
 /**
- * Map an engine attraction (or companion suggestion) to the frontend Activity shape.
- *
- * Shared by getNextActivity and the companion-suggestion passthrough so both
- * produce identical activity objects. Kept dependency-free so it is unit-testable
- * in isolation.
- *
  * @param {object} attr - engine attraction-like object (place_id, name, hours, budget, categories, ...)
- * @returns {object} activity object consumed by the web client
  */
 export function mapEngineAttractionToActivity(attr) {
   return {

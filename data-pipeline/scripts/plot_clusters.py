@@ -12,7 +12,6 @@ Usage:
 Env vars: LOCATION_SLUG (optional), POSTGRES_*
 """
 import argparse
-import json
 import os
 import sys
 import logging
@@ -31,6 +30,8 @@ except ImportError:
 import numpy as np
 import psycopg2
 
+from db_utils import get_db_config, parse_embedding
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -38,18 +39,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_db_config() -> dict:
-    return {
-        "host": os.getenv("POSTGRES_HOST", "localhost"),
-        "port": int(os.getenv("POSTGRES_PORT", "5432")),
-        "database": os.getenv("POSTGRES_ATTRACTIONS_DB", "attractions"),
-        "user": os.getenv("POSTGRES_USER", "postgres"),
-        "password": os.getenv("POSTGRES_PASSWORD", "postgres"),
-    }
-
-
 def load_clusters(config: dict, location_slug: str = None):
-    """Load place_id, embedding, location_cluster_id from database. Optionally filter by location."""
+    """Load place_id, embedding, location_cluster_id; optionally filter by location_slug."""
     with psycopg2.connect(**config) as conn:
         with conn.cursor() as cur:
             if location_slug:
@@ -66,13 +57,6 @@ def load_clusters(config: dict, location_slug: str = None):
                     WHERE embedding IS NOT NULL
                 """)
             rows = cur.fetchall()
-
-    def parse_embedding(emb):
-        if emb is None:
-            return None
-        if isinstance(emb, (list, np.ndarray)):
-            return np.asarray(emb, dtype=np.float32)
-        return np.array(json.loads(emb) if isinstance(emb, str) else list(emb), dtype=np.float32)
 
     place_ids = []
     embeddings = []
@@ -115,7 +99,6 @@ def plot_clusters(
     """Create scatter plot colored by cluster_id."""
     import matplotlib.pyplot as plt
 
-    # Separate noise from clustered points
     noise_mask = cluster_ids == -1
     clustered_mask = ~noise_mask
     n_clusters = len(np.unique(cluster_ids[clustered_mask])) if clustered_mask.any() else 0

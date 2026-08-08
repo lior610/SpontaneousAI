@@ -1,11 +1,8 @@
-/**
- * Trip Service Layer
- * 
- * Calls API to update user preferences (users table) and create trips (trips table).
- */
+/** Trip service layer — calls the API to update user preferences (users table) and create trips (trips table). */
 
 import { format } from 'date-fns';
 import { API_BASE } from '@/config';
+import { throwFetchError, throwApiError, readApiError } from '@/lib/utils';
 import {
   TripSetup,
   TripPreferences,
@@ -46,7 +43,7 @@ function setupToUserPreferences(setup: TripSetup): {
   return { travel_style, pace_preference };
 }
 
-/** Wizard categories with percentages for trip preference_breakdown (list of categories + %). */
+/** Wizard preferences as-is, shaped for the trip's preference_breakdown column. */
 function preferenceBreakdownFromSetup(setup: TripSetup): Record<string, number> {
   return { ...setup.preferences };
 }
@@ -64,8 +61,7 @@ export async function updateUserPreferences(setup: TripSetup): Promise<void> {
     return; // User not in DB (e.g. different DB or recreated table); continue to create trip
   }
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to update preferences (${res.status}): ${text || res.statusText}`);
+    await throwFetchError(res, 'Failed to update preferences');
   }
 }
 
@@ -113,14 +109,7 @@ export async function saveTripSetup(setup: TripSetup, editTripId?: number | null
   });
 
   if (!res.ok) {
-    const errorText = await res.text().catch(() => '');
-    let parsedError = '';
-    try {
-      const parsed = JSON.parse(errorText) as { error?: string };
-      parsedError = parsed.error ?? '';
-    } catch {
-      parsedError = '';
-    }
+    const { text: errorText, message: parsedError } = await readApiError(res);
     if (res.status === 404 && errorText.includes('User not found')) {
       throw new Error(
         'Your account was not found in the database. Please log out and log in again, or register if you haven’t yet.',
@@ -189,8 +178,7 @@ export async function fetchNextActivity(tripId?: number, specificNeed?: string):
   const res = await fetch(url);
   if (!res.ok) {
     if (res.status === 404) return { activity: null, userLocation: null };
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to fetch next activity (${res.status}): ${text || res.statusText}`);
+    await throwFetchError(res, 'Failed to fetch next activity');
   }
   const data = await res.json();
   return {
@@ -203,11 +191,7 @@ export async function fetchNextActivity(tripId?: number, specificNeed?: string):
   };
 }
 
-/**
- * Widen the trip's walking radius (persisted to the DB) when nothing is
- * reachable within the current one. Returns the new radius and whether it
- * actually changed (false means we've hit the ceiling).
- */
+/** Widens the trip's walking radius (persisted to DB); `changed: false` means we're already at the ceiling. */
 export async function expandWalkingRange(
   tripId: number,
   stepKm?: number
@@ -218,8 +202,7 @@ export async function expandWalkingRange(
     body: JSON.stringify(stepKm ? { step_km: stepKm } : {}),
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to expand walking range (${res.status}): ${text || res.statusText}`);
+    await throwFetchError(res, 'Failed to expand walking range');
   }
   const data = await res.json();
   return {
@@ -265,8 +248,7 @@ export async function completeActivity(
     }),
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to save completed activity (${res.status}): ${text || res.statusText}`);
+    await throwFetchError(res, 'Failed to save completed activity');
   }
   const data = await res.json().catch(() => null);
   const cs = data?.companion_suggestion;
@@ -281,8 +263,7 @@ export async function skipActivity(tripId: number, placeId: string): Promise<voi
     body: JSON.stringify({ place_id: placeId }),
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to skip activity (${res.status}): ${text || res.statusText}`);
+    await throwFetchError(res, 'Failed to skip activity');
   }
 }
 
@@ -293,8 +274,7 @@ export async function dismissFoodIntercept(tripId: number): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to dismiss food intercept (${res.status}): ${text || res.statusText}`);
+    await throwFetchError(res, 'Failed to dismiss food intercept');
   }
 }
 
@@ -303,8 +283,7 @@ export async function fetchNextFoodSuggestion(tripId: number): Promise<NextActiv
   const res = await fetch(`${API_BASE}/api/trips/${tripId}/food-intercept/next`);
   if (!res.ok) {
     if (res.status === 404) return { activity: null, userLocation: null };
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to fetch next food suggestion (${res.status}): ${text || res.statusText}`);
+    await throwFetchError(res, 'Failed to fetch next food suggestion');
   }
   const data = await res.json();
   return {
