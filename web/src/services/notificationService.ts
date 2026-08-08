@@ -25,7 +25,6 @@ export function subscribeToNotifications(listener: NotificationListener) {
 }
 
 export async function showAppNotification(title: string, body: string, data?: any) {
-  // Fire in-app listeners unconditionally — fallback for when native notifications are blocked or denied
   listeners.forEach((fn) => fn(title, body, data));
 
   if (!('Notification' in window)) {

@@ -64,8 +64,9 @@ export interface InterceptMetadata {
 export interface NextActivityResponse {
   activity: Activity | null;
   userLocation: { lat: number; lng: number } | null;
-  card_type?: 'food_intercept' | 'regular';
+  card_type?: 'food_intercept' | 'utility' | 'regular';
   intercept_metadata?: InterceptMetadata;
+  exhausted?: boolean;
   // True when the engine returned nothing within the current walking radius
   // (as opposed to the trip being genuinely finished).
   outOfRange?: boolean;

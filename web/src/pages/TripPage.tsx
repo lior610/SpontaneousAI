@@ -10,7 +10,7 @@ import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import { MapView } from '@/components/MapView';
 import { Activity, TripSetup, defaultTripSetup, NextActivityResponse } from '@/types/trip';
-import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchCompletedActivities, CompletedActivityLog, CompanionSuggestion, expandWalkingRange } from '@/services/tripService';
+import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchNextUtilitySuggestion, fetchCompletedActivities, CompletedActivityLog, CompanionSuggestion, expandWalkingRange } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
 import { getCurrentPosition, reportPosition, startTracking, stopTracking, watchArrivalDeparture } from '@/services/locationService';
 import { showAppNotification } from '@/services/notificationService';
@@ -66,6 +66,7 @@ export function TripPage() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isFoodIntercept, setIsFoodIntercept] = useState(false);
+  const [isUtility, setIsUtility] = useState(false);
   const [foodBatchExhausted, setFoodBatchExhausted] = useState(false);
   // Set when the engine has nothing left within the current walking radius.
   const [rangePrompt, setRangePrompt] = useState<{ maxWalkingDistance: number | null } | null>(null);
@@ -168,6 +169,7 @@ export function TripPage() {
   const applyActivityResult = (result: NextActivityResponse) => {
     setCurrentActivity(result.activity);
     setIsFoodIntercept(result.card_type === 'food_intercept');
+    setIsUtility(result.card_type === 'utility');
     if (result.userLocation) {
       setUserLocation(result.userLocation);
       if (tripId) sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(result.userLocation));
@@ -290,6 +292,7 @@ export function TripPage() {
     setCompanionSuggestion(null);
     if (!suggestion?.activity || !tripId) return;
     setIsFoodIntercept(false);
+    setIsUtility(false);
     setCurrentActivity(suggestion.activity);
     sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(suggestion.activity));
   };
@@ -319,6 +322,30 @@ export function TripPage() {
       }
     } catch (e) {
       console.error('[TripPage] Failed to fetch different restaurant:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefreshUtility = async () => {
+    if (!tripId) return;
+    setIsLoading(true);
+    try {
+      if (userLocation) {
+        await reportPosition(tripId, userLocation).catch(e =>
+          console.error('[TripPage] Failed to report refresh utility position:', e)
+        );
+        sessionStorage.setItem(LOCATION_CACHE_KEY(tripId), JSON.stringify(userLocation));
+      }
+      const result = await fetchNextUtilitySuggestion(tripId);
+      if (result.activity) {
+        if (result.exhausted) {
+          showAppNotification('You\'ve seen all options nearby', 'Showing all places from the beginning');
+        }
+        applyActivityResult(result);
+      }
+    } catch (e) {
+      console.error('[TripPage] Failed to fetch different utility:', e);
     } finally {
       setIsLoading(false);
     }
@@ -563,6 +590,15 @@ export function TripPage() {
                   >
                     <RefreshCw className="w-4 h-4" />
                     Suggest a different restaurant
+                  </button>
+                )}
+                {isUtility && (
+                  <button
+                    onClick={handleRefreshUtility}
+                    className="inline-flex items-center gap-2 h-9 px-4 rounded-md text-sm font-semibold text-foreground hover:bg-muted transition-all duration-300"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    I want a different one
                   </button>
                 )}
                 <button

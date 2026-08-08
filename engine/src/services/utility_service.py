@@ -12,23 +12,23 @@ from src.services.geo_utils import haversine
 # Maps a parent category (what the user asks for) to the exact DB category strings.
 # "food" is also used by cluster_queries.py to exclude food from regular recommendations.
 UTILITY_CATEGORY_MAP = {
-    "pharmacy": ['Pharmacy', 'Drugstore', 'Health and Medicine', 'Eyecare Store', 'Cosmetics Store', 'Health and Beauty'],
+    "pharmacy": ['Pharmacy', 'Drugstore', 'Health and Medicine', 'Eyecare Store', 'Health and Beauty'],
     "medical": ['Hospital', 'Medical Center', "Doctor's Office"],
     "grocery": ['Grocery Store', 'Organic Grocery', 'Big Box Store', 'Fruit and Vegetable Store', 'Butcher', 'Cheese Store', 'Food and Beverage Retail', 'Dairy Store', 'Imported Food Store', 'Supermarket', 'Health Food Store'],
     "convenience": ['Convenience Store', 'Snack Place', 'Newsstand', 'Newsagent', 'Discount Store', 'Liquor Store', 'Miscellaneous Store', 'Department Store', 'Retail', 'Stationery Store', 'Post Office', 'Smoke Shop', 'Florist', 'Hardware Store'],
     "police_emergency": ['Police Station', 'Fire Station', 'Ambulance Service'],
-    "food": ['Restaurant', 'Cafe', 'Café', 'Coffee Shop', 'Bakery', 'Pizza Place', 'Pizzeria', 'Diner', 'Seafood Restaurant', 'Steakhouse', 'Burger Joint', 'Sushi Restaurant', 'Noodle House', 'BBQ Joint', 'Breakfast Spot', 'Sandwich Shop', 'Sandwich Spot', 'Ice Cream Shop', 'Deli', 'Bagel Shop', 'Fried Chicken Joint', 'Wings Joint']
+    "food": ['Restaurant', 'Bistro', 'Cafe', 'Café', 'Coffee Shop', 'Bakery', 'Pizza Place', 'Pizzeria', 'Diner', 'Seafood Restaurant', 'Steakhouse', 'Burger Joint', 'Sushi Restaurant', 'Noodle House', 'BBQ Joint', 'Breakfast Spot', 'Sandwich Shop', 'Sandwich Spot', 'Ice Cream Shop', 'Deli', 'Bagel Shop', 'Fried Chicken Joint', 'Wings Joint']
 }
 
 # Food lives in the attractions table (type='attraction'), not in utilities
 FOOD_CATEGORIES = {"food"}
 
 async def get_closest_utilities(
-    parent_category: str, 
-    lat: float, 
-    lng: float, 
+    parent_category: str,
+    lat: float,
+    lng: float,
     location_id: int,
-    current_hour: Optional[int] = None, 
+    current_hour: Optional[int] = None,
     limit: int = 5
 ) -> List[dict]:
     

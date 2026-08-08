@@ -11,8 +11,10 @@ services:
     volumes:
       - ./engine:/app
       - ./shared/python:/shared-python
+      - ./shared:/shared
     environment:
       - PYTHONPATH=/app:/shared-python
+      - FALLBACK_COORDS_PATH=/shared/fallback_coords.json
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
   # 2. API (Node.js)
@@ -25,9 +27,11 @@ services:
     env_file: .env
     environment:
       - ENGINE_HOST=engine  # Override for Docker; .env uses localhost for local runs
+      - FALLBACK_COORDS_PATH=/shared/fallback_coords.json
     volumes:
       - ./api:/app
       - /app/node_modules
+      - ./shared:/shared
     depends_on:
       - engine
     command: npm run dev
