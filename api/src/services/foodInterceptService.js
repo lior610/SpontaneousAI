@@ -13,8 +13,8 @@ import axios from 'axios';
 import * as usersDb from '../db/usersConnection.js';
 
 const FOOD_COOLDOWN_MS = Number.isNaN(parseInt(process.env.FOOD_COOLDOWN_MS, 10)) ? 3600000 : parseInt(process.env.FOOD_COOLDOWN_MS, 10);
-const ACTIVITY_THRESHOLD = Number.isNaN(parseInt(process.env.FOOD_ACTIVITY_THRESHOLD, 10)) ? 2 : parseInt(process.env.FOOD_ACTIVITY_THRESHOLD, 10);
-const HOURS_THRESHOLD = Number.isNaN(parseFloat(process.env.FOOD_HOURS_THRESHOLD)) ? 3 : parseFloat(process.env.FOOD_HOURS_THRESHOLD);
+const ACTIVITY_THRESHOLD = Number.isNaN(parseInt(process.env.FOOD_ACTIVITY_THRESHOLD, 10)) ? 3 : parseInt(process.env.FOOD_ACTIVITY_THRESHOLD, 10);
+const HOURS_THRESHOLD = Number.isNaN(parseFloat(process.env.FOOD_HOURS_THRESHOLD)) ? 4 : parseFloat(process.env.FOOD_HOURS_THRESHOLD);
 const FOOD_INTERCEPT_ENABLED = process.env.FOOD_INTERCEPT_ENABLED !== 'false';
 
 // Singleton Gemini client — avoids re-instantiating on every LLM call
@@ -144,7 +144,7 @@ function getLocalTime(trip) {
 function evaluateGateConditions(localHour, localMinute, todayActivities, lastFoodActivity) {
   const timeDecimal = localHour + localMinute / 60;
   const inMealWindow = (timeDecimal >= 11.5 && timeDecimal <= 14.0) ||
-                       (timeDecimal >= 17.5 && timeDecimal <= 20.5);
+                       (timeDecimal >= 18.0 && timeDecimal <= 21.5);
 
   let activitiesSinceFood;
   if (lastFoodActivity) {
