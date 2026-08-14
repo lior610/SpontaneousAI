@@ -59,13 +59,12 @@ EMA_ALPHA: float = float(os.getenv("EMA_ALPHA", "0.3"))
 CATEGORY_PHRASES: Dict[str, str] = {
     "food":          "food dining restaurants cafes eating",
     "nature":        "nature parks outdoors greenery hiking",
+    "culture":       "culture museums galleries heritage local traditions arts",
     "art":           "art museums galleries exhibitions culture",
     "history":       "history monuments heritage landmarks sightseeing",
     "nightlife":     "nightlife bars clubs evening entertainment drinks",
     "shopping":      "shopping markets boutiques retail stores",
-    "sports":        "sports activities fitness outdoor recreation",
     "entertainment": "entertainment shows theater cinema attractions",
-    "wellness":      "wellness spa relaxation yoga meditation",
     "architecture":  "architecture buildings design urban exploration",
 }
 
