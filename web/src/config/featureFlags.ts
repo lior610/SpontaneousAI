@@ -22,4 +22,11 @@ export const featureFlags = {
     // Kilometers added to max_walking_distance each time the user agrees.
     stepKm: 1,
   },
+  transitSuggestions: {
+    // Mix high-value public-transport places into the suggestion stream, and
+    // offer a "go a bit further by transit?" prompt when walking options run out.
+    enabled: true,
+    // Display-only: the engine's hard search cap (km) for transit-reachable places.
+    maxRadiusKm: 5,
+  },
 } as const;

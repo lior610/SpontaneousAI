@@ -38,7 +38,8 @@ class ClusterRetrievalService:
         user_lat: Optional[float] = None,
         user_lng: Optional[float] = None,
         max_walk_km: Optional[float] = None,
-        current_hour: Optional[int] = None
+        current_hour: Optional[int] = None,
+        search_radius_km: Optional[float] = None,
     ) -> List[Dict[str, Any]]:
         """Fetch a diverse candidate pool of attractions via cluster-aware vector search."""
         if preference_vector is None or len(preference_vector) == 0:
@@ -69,7 +70,8 @@ class ClusterRetrievalService:
                     user_lat=user_lat,
                     user_lng=user_lng,
                     max_walk_km=max_walk_km,
-                    current_hour=current_hour
+                    current_hour=current_hour,
+                    search_radius_km=search_radius_km,
                 )
                 
                 for row in rows:

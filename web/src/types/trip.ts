@@ -44,6 +44,9 @@ export interface Activity {
   completed: boolean;
   lat?: number;
   lng?: number;
+  reachableBy?: 'walking' | 'transit' | null;
+  transitMinutes?: number | null;
+  transitSummary?: string | null;
   feedback?: {
     liked?: boolean;
     tooLong?: boolean;
@@ -70,6 +73,8 @@ export interface NextActivityResponse {
   // True when the engine returned nothing within the current walking radius
   // (as opposed to the trip being genuinely finished).
   outOfRange?: boolean;
+  // True when walking options are exhausted but transit-reachable places remain.
+  transitAvailable?: boolean;
   // The trip's current max walking distance (km), echoed on an out-of-range result.
   maxWalkingDistance?: number | null;
 }

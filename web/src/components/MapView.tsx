@@ -24,6 +24,7 @@ interface MapViewProps {
   userLat?: number;
   userLng?: number;
   showLocationWarning?: boolean;
+  travelMode?: 'walking' | 'transit';
 }
 
 const containerStyle = {
@@ -33,7 +34,7 @@ const containerStyle = {
 
 const libraries: ('marker' | 'geometry')[] = ['marker', 'geometry'];
 
-export function MapView({ attractionLat, attractionLng, attractionTitle, userLat, userLng, showLocationWarning }: MapViewProps) {
+export function MapView({ attractionLat, attractionLng, attractionTitle, userLat, userLng, showLocationWarning, travelMode = 'walking' }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const rendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
   const [walkingMinutes, setWalkingMinutes] = useState<string | null>(null);
@@ -71,11 +72,14 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
       }
 
       const directionsService = new google.maps.DirectionsService();
+      const googleTravelMode = travelMode === 'transit'
+        ? google.maps.TravelMode.TRANSIT
+        : google.maps.TravelMode.WALKING;
       directionsService.route(
         {
           origin: { lat: userLat!, lng: userLng! },
           destination: { lat: attractionLat, lng: attractionLng },
-          travelMode: google.maps.TravelMode.WALKING,
+          travelMode: googleTravelMode,
         },
         (result, status) => {
           if (cancelled) return;
@@ -114,7 +118,7 @@ export function MapView({ attractionLat, attractionLng, attractionTitle, userLat
         rendererRef.current = null;
       }
     };
-  }, [isLoaded, attractionLat, attractionLng, userLat, userLng, hasBothPins]);
+  }, [isLoaded, attractionLat, attractionLng, userLat, userLng, hasBothPins, travelMode]);
 
   // Auto-zoom to fit both pins, or center on attraction if only one pin
   const fitBounds = useCallback(() => {

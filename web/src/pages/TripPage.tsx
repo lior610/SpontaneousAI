@@ -6,11 +6,12 @@ import { ActivityCard } from '@/components/ActivityCard';
 import { FeedbackPopup, FeedbackChoice } from '@/components/FeedbackPopup';
 import { CompanionSuggestionPopup } from '@/components/CompanionSuggestionPopup';
 import { WalkFurtherPrompt } from '@/components/WalkFurtherPrompt';
+import { TransitFurtherPrompt } from '@/components/TransitFurtherPrompt';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import { MapView } from '@/components/MapView';
 import { Activity, TripSetup, defaultTripSetup, NextActivityResponse } from '@/types/trip';
-import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchNextUtilitySuggestion, fetchCompletedActivities, CompletedActivityLog, CompanionSuggestion, expandWalkingRange } from '@/services/tripService';
+import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchNextUtilitySuggestion, fetchCompletedActivities, CompletedActivityLog, CompanionSuggestion, expandWalkingRange, markTransitTooFar, preferWalk } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
 import { getCurrentPosition, reportPosition, startTracking, stopTracking, watchArrivalDeparture } from '@/services/locationService';
 import { showAppNotification } from '@/services/notificationService';
@@ -19,6 +20,7 @@ import { featureFlags } from '@/config/featureFlags';
 const COMPANION_ENABLED = featureFlags.companionSuggestions.enabled;
 const WALK_FURTHER_ENABLED = featureFlags.walkFurther.enabled;
 const WALK_FURTHER_STEP_KM = featureFlags.walkFurther.stepKm;
+const TRANSIT_ENABLED = featureFlags.transitSuggestions.enabled;
 
 const ACTIVITY_CACHE_KEY = (id: number) => `trip_${id}_current_activity`;
 const LOCATION_CACHE_KEY = (id: number) => `trip_${id}_user_location`;
@@ -69,7 +71,7 @@ export function TripPage() {
   const [isUtility, setIsUtility] = useState(false);
   const [foodBatchExhausted, setFoodBatchExhausted] = useState(false);
   // Set when the engine has nothing left within the current walking radius.
-  const [rangePrompt, setRangePrompt] = useState<{ maxWalkingDistance: number | null } | null>(null);
+  const [rangePrompt, setRangePrompt] = useState<{ maxWalkingDistance: number | null; transitAvailable?: boolean } | null>(null);
   const [isExpandingRange, setIsExpandingRange] = useState(false);
   // Set only when the user explicitly chooses to finish (or we can't widen further).
   const [tripFinished, setTripFinished] = useState(false);
@@ -127,6 +129,8 @@ export function TripPage() {
           }
           if (activity) {
             sessionStorage.setItem(ACTIVITY_CACHE_KEY(tripId), JSON.stringify(activity));
+          } else if (result.outOfRange && result.transitAvailable && TRANSIT_ENABLED) {
+            setRangePrompt({ maxWalkingDistance: result.maxWalkingDistance ?? null, transitAvailable: true });
           } else if (result.outOfRange && WALK_FURTHER_ENABLED) {
             // Trip opened with nothing left in range: offer to walk further
             // instead of immediately showing the trip-complete summary.
@@ -183,10 +187,17 @@ export function TripPage() {
   // Shared handler for any next-activity response. Returns true when the
   // walk-further prompt was shown (caller should not treat that as a normal activity).
   const handleNextActivityResult = (result: NextActivityResponse, notifyNext?: boolean): boolean => {
-    if (!result.activity && result.outOfRange && WALK_FURTHER_ENABLED && !tripFinished) {
-      setRangePrompt({ maxWalkingDistance: result.maxWalkingDistance ?? null });
-      setCurrentActivity(null);
-      return true;
+    if (!result.activity && result.outOfRange && !tripFinished) {
+      if (result.transitAvailable && TRANSIT_ENABLED) {
+        setRangePrompt({ maxWalkingDistance: result.maxWalkingDistance ?? null, transitAvailable: true });
+        setCurrentActivity(null);
+        return true;
+      }
+      if (WALK_FURTHER_ENABLED) {
+        setRangePrompt({ maxWalkingDistance: result.maxWalkingDistance ?? null });
+        setCurrentActivity(null);
+        return true;
+      }
     }
 
     setRangePrompt(null);
@@ -238,6 +249,51 @@ export function TripPage() {
     setRangePrompt(null);
     setTripFinished(true);
     setCurrentActivity(null);
+  };
+
+  const handleAcceptTransit = async () => {
+    if (!tripId) return;
+    setIsExpandingRange(true);
+    try {
+      setRangePrompt(null);
+      sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
+      const result = await fetchNextActivity(tripId, undefined, { allowTransit: true });
+      handleNextActivityResult(result);
+    } catch (err) {
+      console.error('[TripPage] Failed to accept transit suggestions:', err);
+    } finally {
+      setIsExpandingRange(false);
+    }
+  };
+
+  const handleTransitTooFar = async () => {
+    if (!tripId || !currentActivity) return;
+    setIsLoading(true);
+    try {
+      await markTransitTooFar(tripId, currentActivity.id);
+      sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
+      const result = await fetchNextActivity(tripId);
+      handleNextActivityResult(result);
+    } catch (err) {
+      console.error('[TripPage] Failed to mark transit too far:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePreferWalk = async () => {
+    if (!tripId || !currentActivity) return;
+    setIsLoading(true);
+    try {
+      await preferWalk(tripId, currentActivity.id);
+      sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
+      const result = await fetchNextActivity(tripId);
+      handleNextActivityResult(result);
+    } catch (err) {
+      console.error('[TripPage] Failed to switch to walking-only:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Backend uses the geofence arrival timestamp to measure dwell time; without explicit
@@ -559,6 +615,7 @@ export function TripPage() {
                   userLat={userLocation?.lat}
                   userLng={userLocation?.lng}
                   showLocationWarning={!userLocation}
+                  travelMode={currentActivity.reachableBy === 'transit' ? 'transit' : 'walking'}
                 />
               </div>
             )}
@@ -579,7 +636,12 @@ export function TripPage() {
                   You've arrived — we'll ask how it went when you leave.
                 </div>
               )}
-              <ActivityCard activity={currentActivity} onComplete={handleActivityComplete} />
+              <ActivityCard
+                activity={currentActivity}
+                onComplete={handleActivityComplete}
+                onTooFar={currentActivity.reachableBy === 'transit' ? handleTransitTooFar : undefined}
+                onPreferWalk={currentActivity.reachableBy === 'transit' ? handlePreferWalk : undefined}
+              />
 
               {/* Refresh / Dismiss Buttons */}
               <div className="text-center space-y-2">
@@ -622,13 +684,23 @@ export function TripPage() {
             </div>
           </div>
         ) : rangePrompt && !tripFinished ? (
-          <WalkFurtherPrompt
-            maxWalkingDistance={rangePrompt.maxWalkingDistance}
-            stepKm={WALK_FURTHER_STEP_KM}
-            isExpanding={isExpandingRange}
-            onExpand={handleWalkFurther}
-            onFinish={handleFinishTrip}
-          />
+          rangePrompt.transitAvailable ? (
+            <TransitFurtherPrompt
+              isExpanding={isExpandingRange}
+              onAcceptTransit={handleAcceptTransit}
+              onWalkFurther={WALK_FURTHER_ENABLED ? handleWalkFurther : undefined}
+              onFinish={handleFinishTrip}
+              walkFurtherStepKm={WALK_FURTHER_STEP_KM}
+            />
+          ) : (
+            <WalkFurtherPrompt
+              maxWalkingDistance={rangePrompt.maxWalkingDistance}
+              stepKm={WALK_FURTHER_STEP_KM}
+              isExpanding={isExpandingRange}
+              onExpand={handleWalkFurther}
+              onFinish={handleFinishTrip}
+            />
+          )
         ) : (
           <div className="max-w-lg mx-auto space-y-6">
             <EmptyState
