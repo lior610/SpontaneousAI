@@ -40,25 +40,32 @@ def _parse_duration_seconds(duration: Optional[str]) -> Optional[int]:
     return None
 
 
+def _as_text(value: Any) -> Optional[str]:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, dict):
+        for key in ("text", "name", "localizedName"):
+            inner = _as_text(value.get(key))
+            if inner:
+                return inner
+    return None
+
+
 def _summarize_transit(route: Dict[str, Any]) -> Optional[str]:
     lines = []
     for leg in route.get("legs") or []:
         for step in leg.get("steps") or []:
             details = step.get("transitDetails") or {}
             line = details.get("transitLine") or {}
-            name = line.get("nameShort") or line.get("name")
-            vehicle = ((line.get("vehicle") or {}).get("name")) if isinstance(line.get("vehicle"), dict) else None
-            headsign = details.get("headsign")
-            if name:
-                parts = [name]
-                if vehicle:
-                    parts.append(vehicle)
-                if headsign:
-                    parts.append(f"to {headsign}")
+            name = _as_text(line.get("nameShort")) or _as_text(line.get("name"))
+            vehicle_obj = line.get("vehicle") if isinstance(line.get("vehicle"), dict) else {}
+            vehicle = _as_text((vehicle_obj or {}).get("name")) or _as_text((vehicle_obj or {}).get("type"))
+            headsign = _as_text(details.get("headsign"))
+            parts = [p for p in (name, vehicle) if p]
+            if headsign:
+                parts.append(f"to {headsign}")
+            if parts:
                 lines.append(" ".join(parts))
-            elif vehicle:
-                lines.append(vehicle)
-    # Unique, keep order, cap length
     seen = []
     for item in lines:
         if item not in seen:

@@ -290,7 +290,7 @@ export function TripPage() {
       const result = await fetchNextActivity(tripId);
       handleNextActivityResult(result);
     } catch (err) {
-      console.error('[TripPage] Failed to switch to walking-only:', err);
+      console.error('[TripPage] Failed to request a walking suggestion:', err);
     } finally {
       setIsLoading(false);
     }

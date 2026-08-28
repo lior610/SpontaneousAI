@@ -37,6 +37,27 @@ function getFallbackCoords(destination) {
 // In-memory cache to hold arrays of recommendations returned by the Engine
 const tripRecommendationsCache = new Map();
 const CACHE_TTL_MS = parseInt(process.env.RECOMMENDATION_CACHE_TTL_MS, 10) || 30 * 60 * 1000; // 30 minutes
+// One-shot: next getNextActivity should be walking, then transit can resume.
+const preferWalkOnce = new Set();
+
+function isWalkingRec(rec) {
+  return (rec?.reachable_by || 'walking') !== 'transit';
+}
+
+/** Move the next walking rec to currentIndex. Transit items behind it stay in the queue. */
+function promoteNextWalking(cached) {
+  if (!cached?.results || cached.currentIndex >= cached.results.length) return false;
+  for (let i = cached.currentIndex; i < cached.results.length; i++) {
+    if (isWalkingRec(cached.results[i])) {
+      if (i !== cached.currentIndex) {
+        const [item] = cached.results.splice(i, 1);
+        cached.results.splice(cached.currentIndex, 0, item);
+      }
+      return true;
+    }
+  }
+  return false;
+}
 
 // Periodic sweep: evict cache entries older than 2× TTL (abandoned sessions)
 setInterval(() => {
@@ -1151,6 +1172,45 @@ export const getNextActivity = async (req, res) => {
       }
     }
 
+    // "I'd rather walk" applies only to the immediately next suggestion.
+    if (preferWalkOnce.has(tripId)) {
+      let gotWalking = promoteNextWalking(cached);
+      if (!gotWalking && !freshBatch) {
+        freshBatch = true;
+        console.log(`[API] Prefer-walk: no walking left in cache for trip ${tripId}, fetching from engine...`);
+        try {
+          const recRes = await axios.post(`http://${ENGINE_HOST}:8000/recommendations/`, {
+            user_id: trip.user_id,
+            trip_id: tripId,
+            current_location: { lat: current_lat, lng: current_lng },
+            current_time: currentTimeObj.toISOString()
+          });
+          const data = recRes.data;
+          const walking = (data || []).filter((r) => (r.reachable_by || 'walking') !== 'transit');
+          const transit = (data || []).filter((r) => r.reachable_by === 'transit');
+          tripRecommendationsCache.set(tripId, {
+            results: walking.length > 0 ? data : [],
+            pendingTransit: walking.length === 0 && transit.length > 0 ? transit : (cached?.pendingTransit || []),
+            currentIndex: 0,
+            fetchedAt: Date.now(),
+          });
+          cached = tripRecommendationsCache.get(tripId);
+          gotWalking = promoteNextWalking(cached);
+        } catch (err) {
+          console.error("Prefer-walk recommendations fetch failed:", err.message);
+        }
+      }
+      preferWalkOnce.delete(tripId);
+      // Do not serve a transit card for this one request if nothing walkable was found.
+      if (!gotWalking && cached?.results && cached.currentIndex < cached.results.length
+          && !isWalkingRec(cached.results[cached.currentIndex])) {
+        const leftover = cached.results.slice(cached.currentIndex);
+        cached.pendingTransit = [...(cached.pendingTransit || []), ...leftover.filter((r) => !isWalkingRec(r))];
+        cached.results = [];
+        cached.currentIndex = 0;
+      }
+    }
+
     if (!cached || !cached.results || cached.results.length === 0 || cached.currentIndex >= cached.results.length) {
       const transitAvailable = !!(cached && Array.isArray(cached.pendingTransit) && cached.pendingTransit.length > 0);
       // Nothing left within the current walking radius.
@@ -1271,8 +1331,8 @@ export const markTransitTooFar = async (req, res) => {
   }
 };
 
-// User asked to walk instead: skip the current transit suggestion and disable
-// the transit overlay for the rest of the trip (max_travel_time_min = 0).
+// User asked to walk instead of this transit suggestion: skip it and serve a
+// walking place next. Transit stays enabled for later suggestions.
 export const preferWalk = async (req, res) => {
   try {
     const tripId = parseInt(req.params.id, 10);
@@ -1294,20 +1354,9 @@ export const preferWalk = async (req, res) => {
       }
     }
 
-    await usersDb.query(
-      `UPDATE trips
-          SET preferred_transportation = 'walking',
-              max_travel_time_min = 0,
-              updated_at = NOW()
-        WHERE trip_id = $1`,
-      [tripId]
-    );
-    tripRecommendationsCache.delete(tripId);
+    preferWalkOnce.add(tripId);
 
-    res.json({
-      preferred_transportation: 'walking',
-      max_travel_time_min: 0,
-    });
+    res.json({ prefer_walk_next: true });
   } catch (error) {
     console.error('Error preferring walk:', error);
     res.status(500).json({ error: error.message });

@@ -296,7 +296,7 @@ export async function preferWalk(tripId: number, placeId: string): Promise<void>
     body: JSON.stringify({ place_id: placeId }),
   });
   if (!res.ok) {
-    await throwFetchError(res, 'Failed to switch to walking-only suggestions');
+    await throwFetchError(res, 'Failed to request a walking suggestion');
   }
 }
 
