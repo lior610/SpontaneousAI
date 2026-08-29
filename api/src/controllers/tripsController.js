@@ -11,8 +11,42 @@ import { mapEngineAttractionToActivity, mapEngineRecommendationToActivity } from
 import { computeExpandedRange } from '../utils/walkingRange.js';
 import { computeReducedTravelTime } from '../utils/travelTime.js';
 
-const require = createRequire(import.meta.url);
-const fallbackCoords = require(process.env.FALLBACK_COORDS_PATH || '../../../shared/fallback_coords.json');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function loadFallbackCoords() {
+  const envPath = process.env.FALLBACK_COORDS_PATH;
+  if (envPath && fs.existsSync(envPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(envPath, 'utf8'));
+    } catch (e) {
+      console.error('Error reading fallback coords from env path:', e.message);
+    }
+  }
+  const candidates = [
+    '/shared/fallback_coords.json',
+    path.resolve(__dirname, '../../../shared/fallback_coords.json'),
+    path.resolve(__dirname, '../../shared/fallback_coords.json'),
+    path.resolve(process.cwd(), 'shared/fallback_coords.json'),
+    path.resolve(process.cwd(), '../shared/fallback_coords.json'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) {
+      try {
+        return JSON.parse(fs.readFileSync(c, 'utf8'));
+      } catch (e) {
+        console.error(`Error reading fallback coords from ${c}:`, e.message);
+      }
+    }
+  }
+  return {};
+}
+
+const fallbackCoords = loadFallbackCoords();
 
 const ENGINE_HOST = (() => { const h = process.env.ENGINE_HOST || '127.0.0.1'; return h === 'localhost' ? '127.0.0.1' : h; })();
 const STAY_DISLIKE_RATIO = parseFloat(process.env.STAY_DISLIKE_RATIO) || 0.5;
@@ -209,6 +243,7 @@ export const createTrip = async (req, res) => {
       preference_breakdown,
       max_walking_distance,
       preferred_transportation,
+      max_travel_time_min,
       with_kids
     } = req.body;
 
@@ -301,6 +336,21 @@ export const createTrip = async (req, res) => {
       preferredTransportationValue = preferred_transportation;
     }
 
+    let maxTravelTimeMinValue = null;
+    if (preferredTransportationValue === 'walking') {
+      maxTravelTimeMinValue = 0;
+    } else {
+      if (max_travel_time_min !== undefined && max_travel_time_min !== null) {
+        const parsed = parseInt(max_travel_time_min, 10);
+        if (isNaN(parsed) || parsed < 0) {
+          return res.status(400).json({ error: 'max_travel_time_min must be a non-negative integer' });
+        }
+        maxTravelTimeMinValue = parsed;
+      } else {
+        maxTravelTimeMinValue = 30;
+      }
+    }
+
     const withKidsValue = with_kids !== undefined ? (with_kids !== null ? Boolean(with_kids) : null) : null;
 
     const startDateStr = normalizeDateStr(start_date);
@@ -326,13 +376,13 @@ export const createTrip = async (req, res) => {
     const result = await usersDb.query(
       `INSERT INTO trips (
         user_id, destination, start_date, end_date, budget, preference_breakdown,
-        max_walking_distance, preferred_transportation, with_kids
+        max_walking_distance, preferred_transportation, max_travel_time_min, with_kids
       )
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10)
        RETURNING trip_id, user_id, destination, start_date, end_date, budget, preference_breakdown,
-         max_walking_distance, preferred_transportation, with_kids, created_at, updated_at`,
+         max_walking_distance, preferred_transportation, max_travel_time_min, with_kids, created_at, updated_at`,
       [userId, destination, startDateStr, endDateStr, budgetValue, preferenceBreakdownValue,
-        maxWalkingDistanceValue, preferredTransportationValue, withKidsValue]
+        maxWalkingDistanceValue, preferredTransportationValue, maxTravelTimeMinValue, withKidsValue]
     );
 
     const newTrip = result.rows[0];
@@ -351,6 +401,7 @@ export const createTrip = async (req, res) => {
         preference_breakdown: newTrip.preference_breakdown,
         max_walking_distance: newTrip.max_walking_distance != null ? parseFloat(newTrip.max_walking_distance) : null,
         preferred_transportation: newTrip.preferred_transportation,
+        max_travel_time_min: newTrip.max_travel_time_min,
         with_kids: newTrip.with_kids,
         created_at: newTrip.created_at,
         updated_at: newTrip.updated_at
@@ -1362,6 +1413,56 @@ export const preferWalk = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export const enableTransit = async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.id, 10);
+    if (isNaN(tripId) || tripId <= 0) {
+      return res.status(400).json({ error: 'Invalid trip ID' });
+    }
+
+    const { max_travel_time_min } = req.body || {};
+    let travelTime = 30;
+    if (max_travel_time_min !== undefined && max_travel_time_min !== null) {
+      const parsed = parseInt(max_travel_time_min, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        travelTime = parsed;
+      }
+    }
+
+    const updateResult = await usersDb.query(
+      `UPDATE trips
+       SET preferred_transportation = 'public',
+           max_travel_time_min = $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE trip_id = $2
+       RETURNING trip_id, user_id, preferred_transportation, max_travel_time_min`,
+      [travelTime, tripId]
+    );
+
+    if (updateResult.rowCount === 0) {
+      return res.status(404).json({ error: 'Trip not found' });
+    }
+
+    // Evict recommendation cache so next request fetches fresh transit-aware recommendations
+    tripRecommendationsCache.delete(tripId);
+    preferWalkOnce.delete(tripId);
+
+    const tripRow = updateResult.rows[0];
+    schedulePreferenceEmbeddingRebuild(tripRow.user_id, tripId);
+
+    res.json({
+      ok: true,
+      trip_id: tripId,
+      preferred_transportation: 'public',
+      max_travel_time_min: travelTime,
+    });
+  } catch (error) {
+    console.error('Error enabling transit:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 
 export const skipTripActivity = async (req, res) => {
   try {

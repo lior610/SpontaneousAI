@@ -14,6 +14,7 @@ router.post('/:id/activities/complete', tripsController.completeTripActivity);
 router.post('/:id/activities/skip', tripsController.skipTripActivity);
 router.post('/:id/activities/transit-too-far', tripsController.markTransitTooFar);
 router.post('/:id/activities/prefer-walk', tripsController.preferWalk);
+router.post('/:id/enable-transit', tripsController.enableTransit);
 router.post('/:id/food-intercept/dismiss', tripsController.dismissFoodIntercept);
 router.get('/:id/food-intercept/next', tripsController.nextFoodSuggestion);
 router.get('/:id/utility/next', tripsController.nextUtilitySuggestion);

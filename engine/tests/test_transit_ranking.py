@@ -43,3 +43,17 @@ def test_annotate_and_preference_gate():
     assert "w" in ids
     assert "t1" in ids
     assert "t2" not in ids
+
+
+def test_trip_transit_active_checks():
+    from src.services.transit_config import trip_transit_active
+
+    # Transit active when preferred_transportation is public and max_travel_time_min > 0
+    assert trip_transit_active({"preferred_transportation": "public", "max_travel_time_min": 30}) is True
+    # Inactive if preferred_transportation is walking
+    assert trip_transit_active({"preferred_transportation": "walking", "max_travel_time_min": 30}) is False
+    # Inactive if max_travel_time_min is 0 or null
+    assert trip_transit_active({"preferred_transportation": "public", "max_travel_time_min": 0}) is False
+    assert trip_transit_active({"preferred_transportation": "public", "max_travel_time_min": None}) is False
+    assert trip_transit_active(None) is False
+

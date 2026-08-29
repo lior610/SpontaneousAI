@@ -10,6 +10,8 @@ export interface TripPreferences {
 export interface TripConstraints {
   maxWalkingDistance: number;
   transportType: 'walking' | 'public' | 'taxi';
+  allowPublicTransit: boolean;
+  maxTravelTimeMin: number;
 }
 
 export interface ItineraryItem {
@@ -90,7 +92,9 @@ export const defaultPreferences: TripPreferences = {
 
 export const defaultConstraints: TripConstraints = {
   maxWalkingDistance: 2,
-  transportType: 'walking',
+  transportType: 'public',
+  allowPublicTransit: true,
+  maxTravelTimeMin: 30,
 };
 
 export const defaultTripSetup: TripSetup = {

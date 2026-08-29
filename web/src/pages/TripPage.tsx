@@ -11,7 +11,7 @@ import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import { MapView } from '@/components/MapView';
 import { Activity, TripSetup, defaultTripSetup, NextActivityResponse } from '@/types/trip';
-import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchNextUtilitySuggestion, fetchCompletedActivities, CompletedActivityLog, CompanionSuggestion, expandWalkingRange, markTransitTooFar, preferWalk } from '@/services/tripService';
+import { fetchNextActivity, completeActivity, skipActivity, dismissFoodIntercept, fetchNextFoodSuggestion, fetchNextUtilitySuggestion, fetchCompletedActivities, CompletedActivityLog, CompanionSuggestion, expandWalkingRange, enableTripTransit, markTransitTooFar, preferWalk } from '@/services/tripService';
 import { clearCurrentUser } from '@/services/authService';
 import { getCurrentPosition, reportPosition, startTracking, stopTracking, watchArrivalDeparture } from '@/services/locationService';
 import { showAppNotification } from '@/services/notificationService';
@@ -261,6 +261,22 @@ export function TripPage() {
       handleNextActivityResult(result);
     } catch (err) {
       console.error('[TripPage] Failed to accept transit suggestions:', err);
+    } finally {
+      setIsExpandingRange(false);
+    }
+  };
+
+  const handleEnableTransit = async (minutes: number = 30) => {
+    if (!tripId) return;
+    setIsExpandingRange(true);
+    try {
+      await enableTripTransit(tripId, minutes);
+      setRangePrompt(null);
+      sessionStorage.removeItem(ACTIVITY_CACHE_KEY(tripId));
+      const result = await fetchNextActivity(tripId, undefined, { allowTransit: true });
+      handleNextActivityResult(result);
+    } catch (err) {
+      console.error('[TripPage] Failed to enable public transit:', err);
     } finally {
       setIsExpandingRange(false);
     }
@@ -698,6 +714,7 @@ export function TripPage() {
               stepKm={WALK_FURTHER_STEP_KM}
               isExpanding={isExpandingRange}
               onExpand={handleWalkFurther}
+              onEnableTransit={TRANSIT_ENABLED ? handleEnableTransit : undefined}
               onFinish={handleFinishTrip}
             />
           )

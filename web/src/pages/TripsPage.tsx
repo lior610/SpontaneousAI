@@ -19,6 +19,7 @@ interface ApiTrip {
   preference_breakdown: Record<string, number> | null;
   max_walking_distance: number | null;
   preferred_transportation: 'walking' | 'public' | 'taxi' | null;
+  max_travel_time_min: number | null;
 }
 
 function parseApiDate(raw: string | null | undefined): Date | null {
@@ -45,6 +46,7 @@ function tripCategory(trip: ApiTrip): TripCategory {
 
 function toTripSetup(trip: ApiTrip): TripSetup {
   const pref = trip.preference_breakdown ?? {};
+  const isPublic = trip.preferred_transportation === 'public';
   return {
     startDate: parseApiDate(trip.start_date),
     endDate: parseApiDate(trip.end_date),
@@ -56,6 +58,8 @@ function toTripSetup(trip: ApiTrip): TripSetup {
     constraints: {
       maxWalkingDistance: trip.max_walking_distance ?? defaultTripSetup.constraints.maxWalkingDistance,
       transportType: trip.preferred_transportation ?? defaultTripSetup.constraints.transportType,
+      allowPublicTransit: isPublic,
+      maxTravelTimeMin: trip.max_travel_time_min ?? defaultTripSetup.constraints.maxTravelTimeMin,
     },
   };
 }

@@ -95,7 +95,8 @@ export async function saveTripSetup(setup: TripSetup, editTripId?: number | null
     budget,
     preference_breakdown: preferenceBreakdownFromSetup(setup),
     max_walking_distance: setup.constraints.maxWalkingDistance,
-    preferred_transportation: setup.constraints.transportType,
+    preferred_transportation: setup.constraints.allowPublicTransit ? 'public' : 'walking',
+    max_travel_time_min: setup.constraints.allowPublicTransit ? (setup.constraints.maxTravelTimeMin ?? 30) : 0,
   };
 
   const isEditing = typeof editTripId === 'number' && Number.isFinite(editTripId) && editTripId > 0;
@@ -216,6 +217,22 @@ export async function expandWalkingRange(
     changed: !!data.changed,
     atMax: !!data.at_max,
   };
+}
+
+/** Enables public transit for the trip with a given max travel time cap (min). */
+export async function enableTripTransit(
+  tripId: number,
+  maxTravelTimeMin: number = 30
+): Promise<{ ok: boolean; trip_id: number; preferred_transportation: string; max_travel_time_min: number }> {
+  const res = await fetch(`${API_BASE}/api/trips/${tripId}/enable-transit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ max_travel_time_min: maxTravelTimeMin }),
+  });
+  if (!res.ok) {
+    await throwFetchError(res, 'Failed to enable public transit');
+  }
+  return res.json();
 }
 
 /** "Because you liked X, you might also like Y" suggestion from a matched popular trip. */

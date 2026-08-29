@@ -50,13 +50,15 @@ def google_maps_api_key() -> str:
 
 def trip_transit_active(trip_data: Optional[Dict[str, Any]]) -> bool:
     """
-    Transit overlay is on when the global flag is enabled and the trip still
-    allows a positive max_travel_time_min. Prefer-walk / too-far-at-floor
-    set max_travel_time_min to 0 to disable for the rest of the trip.
+    Transit overlay is on when the global flag is enabled, the trip's preferred
+    transportation is 'public' (not walking-only), and max_travel_time_min > 0.
     """
     if not transit_suggestions_enabled():
         return False
     if not trip_data:
+        return False
+    preferred = (trip_data.get("preferred_transportation") or "").strip().lower()
+    if preferred != "public":
         return False
     max_travel = trip_data.get("max_travel_time_min")
     try:
