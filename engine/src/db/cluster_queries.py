@@ -21,7 +21,8 @@ def execute_cluster_similarity_query(
     user_lat: Optional[float] = None,
     user_lng: Optional[float] = None,
     max_walk_km: Optional[float] = None,
-    current_hour: Optional[int] = None
+    current_hour: Optional[int] = None,
+    search_radius_km: Optional[float] = None,
 ) -> Tuple[List[Dict[str, Any]], List[str]]:
     """
     Returns (rows, column_names) of the best-matching attractions grouped by cluster.
@@ -75,10 +76,12 @@ def execute_cluster_similarity_query(
 
     params: List[Any] = [embedding_str, embedding_str, embedding_str, location_id]
 
-    # Bounding box: only consider attractions within walking distance.
-    # Rectangular approximation — corners can be up to max_walk_km * sqrt(2).
-    if user_lat is not None and user_lng is not None and max_walk_km is not None:
-        soft_limit_km = max_walk_km * 1.0
+    # Bounding box around the user. Defaults to walking distance; when transit
+    # is enabled the caller passes search_radius_km = max(walk, TRANSIT_MAX_RADIUS_KM).
+    # Rectangular approximation — corners can be up to radius * sqrt(2).
+    bbox_km = search_radius_km if search_radius_km is not None else max_walk_km
+    if user_lat is not None and user_lng is not None and bbox_km is not None:
+        soft_limit_km = float(bbox_km)
 
         lat_offset = soft_limit_km / 111.045  # 1 degree lat ≈ 111 km
         min_lat = user_lat - lat_offset

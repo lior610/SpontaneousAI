@@ -3,8 +3,9 @@
 // identical objects.
 /**
  * @param {object} attr - engine attraction-like object (place_id, name, hours, budget, categories, ...)
+ * @param {object} [rec] - optional parent RecommendationResponse (reachable_by, transit_minutes, ...)
  */
-export function mapEngineAttractionToActivity(attr) {
+export function mapEngineAttractionToActivity(attr, rec = {}) {
   return {
     id: attr.place_id || attr.activity_id,
     title: attr.name,
@@ -19,5 +20,15 @@ export function mapEngineAttractionToActivity(attr) {
     lat: attr.latitude,
     lng: attr.longitude,
     completed: false,
+    reachableBy: rec.reachable_by || attr.reachable_by || null,
+    transitMinutes: rec.transit_minutes ?? attr.transit_minutes ?? null,
+    transitSummary: rec.transit_summary ?? attr.transit_summary ?? null,
   };
+}
+
+/** Map a full engine RecommendationResponse (attraction + transit metadata). */
+export function mapEngineRecommendationToActivity(rec) {
+  if (!rec) return null;
+  const attr = rec.attraction || rec;
+  return mapEngineAttractionToActivity(attr, rec);
 }

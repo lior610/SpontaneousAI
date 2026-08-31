@@ -95,7 +95,8 @@ export async function saveTripSetup(setup: TripSetup, editTripId?: number | null
     budget,
     preference_breakdown: preferenceBreakdownFromSetup(setup),
     max_walking_distance: setup.constraints.maxWalkingDistance,
-    preferred_transportation: setup.constraints.transportType,
+    preferred_transportation: setup.constraints.allowPublicTransit ? 'public' : 'walking',
+    max_travel_time_min: setup.constraints.allowPublicTransit ? (setup.constraints.maxTravelTimeMin ?? 30) : 0,
   };
 
   const isEditing = typeof editTripId === 'number' && Number.isFinite(editTripId) && editTripId > 0;
@@ -163,11 +164,16 @@ export type { NextActivityResponse as NextActivityResult } from '@/types/trip';
 
 import { devToolsState } from '../components/DevToolsPanel';
 
-export async function fetchNextActivity(tripId?: number, specificNeed?: string): Promise<NextActivityResult> {
+export async function fetchNextActivity(
+  tripId?: number,
+  specificNeed?: string,
+  options?: { allowTransit?: boolean }
+): Promise<NextActivityResult> {
   if (!tripId) return { activity: null, userLocation: null };
   
   const params = new URLSearchParams();
   if (specificNeed) params.append('specific_need', specificNeed);
+  if (options?.allowTransit) params.append('allow_transit', '1');
   if (devToolsState.mockTimeEnabled) params.append('mock_time', devToolsState.mockTime);
   
   const queryString = params.toString();
@@ -187,6 +193,7 @@ export async function fetchNextActivity(tripId?: number, specificNeed?: string):
     card_type: data.card_type,
     intercept_metadata: data.intercept_metadata,
     outOfRange: data.out_of_range || false,
+    transitAvailable: data.transit_available || false,
     maxWalkingDistance: data.max_walking_distance ?? null,
   };
 }
@@ -210,6 +217,22 @@ export async function expandWalkingRange(
     changed: !!data.changed,
     atMax: !!data.at_max,
   };
+}
+
+/** Enables public transit for the trip with a given max travel time cap (min). */
+export async function enableTripTransit(
+  tripId: number,
+  maxTravelTimeMin: number = 30
+): Promise<{ ok: boolean; trip_id: number; preferred_transportation: string; max_travel_time_min: number }> {
+  const res = await fetch(`${API_BASE}/api/trips/${tripId}/enable-transit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ max_travel_time_min: maxTravelTimeMin }),
+  });
+  if (!res.ok) {
+    await throwFetchError(res, 'Failed to enable public transit');
+  }
+  return res.json();
 }
 
 /** "Because you liked X, you might also like Y" suggestion from a matched popular trip. */
@@ -264,6 +287,33 @@ export async function skipActivity(tripId: number, placeId: string): Promise<voi
   });
   if (!res.ok) {
     await throwFetchError(res, 'Failed to skip activity');
+  }
+}
+
+export async function markTransitTooFar(tripId: number, placeId: string): Promise<{ maxTravelTimeMin: number; atFloor: boolean }> {
+  const res = await fetch(`${API_BASE}/api/trips/${tripId}/activities/transit-too-far`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ place_id: placeId }),
+  });
+  if (!res.ok) {
+    await throwFetchError(res, 'Failed to mark transit suggestion as too far');
+  }
+  const data = await res.json();
+  return {
+    maxTravelTimeMin: Number(data.max_travel_time_min),
+    atFloor: !!data.at_floor,
+  };
+}
+
+export async function preferWalk(tripId: number, placeId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/trips/${tripId}/activities/prefer-walk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ place_id: placeId }),
+  });
+  if (!res.ok) {
+    await throwFetchError(res, 'Failed to request a walking suggestion');
   }
 }
 

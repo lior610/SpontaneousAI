@@ -7,16 +7,52 @@ import * as locationService from '../services/locationService.js';
 import { checkFoodIntercept, dismissFoodSuggestion, getCurrentFoodPlaceId, getNextFoodSuggestion, refillAndGetFood, clearLlmDeclineCooldown } from '../services/foodInterceptService.js';
 import { refillAndGetUtility, getNextUtilitySuggestion } from '../services/utilitySuggestionService.js';
 import { getRecommendedStayMinutes } from '../services/recommendedStay.js';
-import { mapEngineAttractionToActivity } from '../utils/activityMapper.js';
+import { mapEngineAttractionToActivity, mapEngineRecommendationToActivity } from '../utils/activityMapper.js';
 import { computeExpandedRange } from '../utils/walkingRange.js';
+import { computeReducedTravelTime } from '../utils/travelTime.js';
 
-const require = createRequire(import.meta.url);
-const fallbackCoords = require(process.env.FALLBACK_COORDS_PATH || '../../../shared/fallback_coords.json');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function loadFallbackCoords() {
+  const envPath = process.env.FALLBACK_COORDS_PATH;
+  if (envPath && fs.existsSync(envPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(envPath, 'utf8'));
+    } catch (e) {
+      console.error('Error reading fallback coords from env path:', e.message);
+    }
+  }
+  const candidates = [
+    '/shared/fallback_coords.json',
+    path.resolve(__dirname, '../../../shared/fallback_coords.json'),
+    path.resolve(__dirname, '../../shared/fallback_coords.json'),
+    path.resolve(process.cwd(), 'shared/fallback_coords.json'),
+    path.resolve(process.cwd(), '../shared/fallback_coords.json'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) {
+      try {
+        return JSON.parse(fs.readFileSync(c, 'utf8'));
+      } catch (e) {
+        console.error(`Error reading fallback coords from ${c}:`, e.message);
+      }
+    }
+  }
+  return {};
+}
+
+const fallbackCoords = loadFallbackCoords();
 
 const ENGINE_HOST = (() => { const h = process.env.ENGINE_HOST || '127.0.0.1'; return h === 'localhost' ? '127.0.0.1' : h; })();
 const STAY_DISLIKE_RATIO = parseFloat(process.env.STAY_DISLIKE_RATIO) || 0.5;
 const WALK_EXPAND_STEP_KM = parseFloat(process.env.WALK_EXPAND_STEP_KM) || 1.0;
 const WALK_MAX_KM = parseFloat(process.env.WALK_MAX_KM) || 20;
+const TRANSIT_TOO_FAR_STEP_MIN = parseInt(process.env.TRANSIT_TOO_FAR_STEP_MIN, 10) || 10;
 
 function recordFeedback(userId, tripId, placeId, action) {
   return axios.post(`http://${ENGINE_HOST}:8000/recommendations/feedback`, {
@@ -35,6 +71,27 @@ function getFallbackCoords(destination) {
 // In-memory cache to hold arrays of recommendations returned by the Engine
 const tripRecommendationsCache = new Map();
 const CACHE_TTL_MS = parseInt(process.env.RECOMMENDATION_CACHE_TTL_MS, 10) || 30 * 60 * 1000; // 30 minutes
+// One-shot: next getNextActivity should be walking, then transit can resume.
+const preferWalkOnce = new Set();
+
+function isWalkingRec(rec) {
+  return (rec?.reachable_by || 'walking') !== 'transit';
+}
+
+/** Move the next walking rec to currentIndex. Transit items behind it stay in the queue. */
+function promoteNextWalking(cached) {
+  if (!cached?.results || cached.currentIndex >= cached.results.length) return false;
+  for (let i = cached.currentIndex; i < cached.results.length; i++) {
+    if (isWalkingRec(cached.results[i])) {
+      if (i !== cached.currentIndex) {
+        const [item] = cached.results.splice(i, 1);
+        cached.results.splice(cached.currentIndex, 0, item);
+      }
+      return true;
+    }
+  }
+  return false;
+}
 
 // Periodic sweep: evict cache entries older than 2× TTL (abandoned sessions)
 setInterval(() => {
@@ -186,6 +243,7 @@ export const createTrip = async (req, res) => {
       preference_breakdown,
       max_walking_distance,
       preferred_transportation,
+      max_travel_time_min,
       with_kids
     } = req.body;
 
@@ -278,6 +336,21 @@ export const createTrip = async (req, res) => {
       preferredTransportationValue = preferred_transportation;
     }
 
+    let maxTravelTimeMinValue = null;
+    if (preferredTransportationValue === 'walking') {
+      maxTravelTimeMinValue = 0;
+    } else {
+      if (max_travel_time_min !== undefined && max_travel_time_min !== null) {
+        const parsed = parseInt(max_travel_time_min, 10);
+        if (isNaN(parsed) || parsed < 0) {
+          return res.status(400).json({ error: 'max_travel_time_min must be a non-negative integer' });
+        }
+        maxTravelTimeMinValue = parsed;
+      } else {
+        maxTravelTimeMinValue = 30;
+      }
+    }
+
     const withKidsValue = with_kids !== undefined ? (with_kids !== null ? Boolean(with_kids) : null) : null;
 
     const startDateStr = normalizeDateStr(start_date);
@@ -303,13 +376,13 @@ export const createTrip = async (req, res) => {
     const result = await usersDb.query(
       `INSERT INTO trips (
         user_id, destination, start_date, end_date, budget, preference_breakdown,
-        max_walking_distance, preferred_transportation, with_kids
+        max_walking_distance, preferred_transportation, max_travel_time_min, with_kids
       )
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10)
        RETURNING trip_id, user_id, destination, start_date, end_date, budget, preference_breakdown,
-         max_walking_distance, preferred_transportation, with_kids, created_at, updated_at`,
+         max_walking_distance, preferred_transportation, max_travel_time_min, with_kids, created_at, updated_at`,
       [userId, destination, startDateStr, endDateStr, budgetValue, preferenceBreakdownValue,
-        maxWalkingDistanceValue, preferredTransportationValue, withKidsValue]
+        maxWalkingDistanceValue, preferredTransportationValue, maxTravelTimeMinValue, withKidsValue]
     );
 
     const newTrip = result.rows[0];
@@ -328,6 +401,7 @@ export const createTrip = async (req, res) => {
         preference_breakdown: newTrip.preference_breakdown,
         max_walking_distance: newTrip.max_walking_distance != null ? parseFloat(newTrip.max_walking_distance) : null,
         preferred_transportation: newTrip.preferred_transportation,
+        max_travel_time_min: newTrip.max_travel_time_min,
         with_kids: newTrip.with_kids,
         created_at: newTrip.created_at,
         updated_at: newTrip.updated_at
@@ -1106,8 +1180,21 @@ export const getNextActivity = async (req, res) => {
       tripRecommendationsCache.delete(tripId);
       cached = null;
     }
+
+    const hasPendingTransit = !!(cached && Array.isArray(cached.pendingTransit) && cached.pendingTransit.length > 0);
+    const resultsExhausted = !cached || !cached.results || cached.currentIndex >= cached.results.length;
+
+    // User accepted the "go further by transit?" prompt: serve the held transit batch.
+    if (req.query.allow_transit === '1' && hasPendingTransit && resultsExhausted) {
+      cached.results = cached.pendingTransit;
+      cached.pendingTransit = [];
+      cached.currentIndex = 0;
+    }
+
     let freshBatch = false;
-    if (!cached || cached.currentIndex >= cached.results.length) {
+    const stillExhausted = !cached || !cached.results || cached.currentIndex >= cached.results.length;
+    const holdForTransitPrompt = stillExhausted && cached && Array.isArray(cached.pendingTransit) && cached.pendingTransit.length > 0;
+    if (stillExhausted && !holdForTransitPrompt) {
       freshBatch = true;
       console.log(`[API] Cache ${!cached ? 'empty' : 'exhausted'} for trip ${tripId}, fetching from engine...`);
       try {
@@ -1118,7 +1205,17 @@ export const getNextActivity = async (req, res) => {
           current_time: currentTimeObj.toISOString()
         });
         const data = recRes.data;
-        tripRecommendationsCache.set(tripId, { results: data, currentIndex: 0, fetchedAt: Date.now() });
+        const walking = (data || []).filter((r) => (r.reachable_by || 'walking') !== 'transit');
+        const transit = (data || []).filter((r) => r.reachable_by === 'transit');
+        // If nothing is walkable but transit candidates exist, hold them until the
+        // user opts in via allow_transit (the "Go a bit further by transit?" prompt).
+        const serveTransitNow = req.query.allow_transit === '1' && walking.length === 0 && transit.length > 0;
+        tripRecommendationsCache.set(tripId, {
+          results: walking.length > 0 || serveTransitNow ? data : [],
+          pendingTransit: walking.length === 0 && transit.length > 0 && !serveTransitNow ? transit : [],
+          currentIndex: 0,
+          fetchedAt: Date.now(),
+        });
         cached = tripRecommendationsCache.get(tripId);
       } catch (err) {
         console.error("Recommendations fetch failed:", err.message);
@@ -1126,23 +1223,63 @@ export const getNextActivity = async (req, res) => {
       }
     }
 
-    if (!cached || !cached.results || cached.results.length === 0) {
+    // "I'd rather walk" applies only to the immediately next suggestion.
+    if (preferWalkOnce.has(tripId)) {
+      let gotWalking = promoteNextWalking(cached);
+      if (!gotWalking && !freshBatch) {
+        freshBatch = true;
+        console.log(`[API] Prefer-walk: no walking left in cache for trip ${tripId}, fetching from engine...`);
+        try {
+          const recRes = await axios.post(`http://${ENGINE_HOST}:8000/recommendations/`, {
+            user_id: trip.user_id,
+            trip_id: tripId,
+            current_location: { lat: current_lat, lng: current_lng },
+            current_time: currentTimeObj.toISOString()
+          });
+          const data = recRes.data;
+          const walking = (data || []).filter((r) => (r.reachable_by || 'walking') !== 'transit');
+          const transit = (data || []).filter((r) => r.reachable_by === 'transit');
+          tripRecommendationsCache.set(tripId, {
+            results: walking.length > 0 ? data : [],
+            pendingTransit: walking.length === 0 && transit.length > 0 ? transit : (cached?.pendingTransit || []),
+            currentIndex: 0,
+            fetchedAt: Date.now(),
+          });
+          cached = tripRecommendationsCache.get(tripId);
+          gotWalking = promoteNextWalking(cached);
+        } catch (err) {
+          console.error("Prefer-walk recommendations fetch failed:", err.message);
+        }
+      }
+      preferWalkOnce.delete(tripId);
+      // Do not serve a transit card for this one request if nothing walkable was found.
+      if (!gotWalking && cached?.results && cached.currentIndex < cached.results.length
+          && !isWalkingRec(cached.results[cached.currentIndex])) {
+        const leftover = cached.results.slice(cached.currentIndex);
+        cached.pendingTransit = [...(cached.pendingTransit || []), ...leftover.filter((r) => !isWalkingRec(r))];
+        cached.results = [];
+        cached.currentIndex = 0;
+      }
+    }
+
+    if (!cached || !cached.results || cached.results.length === 0 || cached.currentIndex >= cached.results.length) {
+      const transitAvailable = !!(cached && Array.isArray(cached.pendingTransit) && cached.pendingTransit.length > 0);
       // Nothing left within the current walking radius.
       return res.json({
         activity: null,
         userLocation: position ? { lat: current_lat, lng: current_lng } : null,
         out_of_range: true,
+        transit_available: transitAvailable,
         max_walking_distance: trip.max_walking_distance != null ? Number(trip.max_walking_distance) : null,
       });
     }
 
     const nextRec = cached.results[cached.currentIndex];
     cached.currentIndex++;
-    const attr = nextRec.attraction;
     const cacheAgeSeconds = Math.round((Date.now() - cached.fetchedAt) / 1000);
 
     res.json({
-      activity: mapEngineAttractionToActivity(attr),
+      activity: mapEngineRecommendationToActivity(nextRec),
       userLocation: position ? { lat: current_lat, lng: current_lng } : null,
       _debug: {
         source: freshBatch || cacheExpired ? 'fresh_batch' : 'cached_batch',
@@ -1195,6 +1332,137 @@ export const expandWalkingRange = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// User said a transit suggestion is too far: skip it and shrink max_travel_time_min.
+export const markTransitTooFar = async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.id, 10);
+    if (isNaN(tripId) || tripId <= 0) return res.status(400).json({ error: 'Invalid trip ID' });
+    const { place_id } = req.body || {};
+
+    const tripCheck = await usersDb.query(
+      'SELECT user_id, max_travel_time_min FROM trips WHERE trip_id = $1',
+      [tripId]
+    );
+    if (tripCheck.rowCount === 0) return res.status(404).json({ error: 'Trip not found' });
+    const userId = tripCheck.rows[0].user_id;
+    const current = tripCheck.rows[0].max_travel_time_min != null
+      ? Number(tripCheck.rows[0].max_travel_time_min)
+      : 0;
+
+    if (place_id) {
+      try {
+        await recordFeedback(userId, tripId, place_id, 'skipped');
+      } catch (err) {
+        console.error('Error sending too-far skip feedback to engine:', err.message);
+      }
+    }
+
+    const requestedStep = parseInt(req.body?.step_min, 10);
+    const step = Number.isFinite(requestedStep) && requestedStep > 0 ? requestedStep : TRANSIT_TOO_FAR_STEP_MIN;
+    const { next, changed, atFloor } = computeReducedTravelTime(current, step);
+
+    if (changed) {
+      await usersDb.query(
+        'UPDATE trips SET max_travel_time_min = $1, updated_at = NOW() WHERE trip_id = $2',
+        [next, tripId]
+      );
+    }
+    tripRecommendationsCache.delete(tripId);
+
+    res.json({
+      max_travel_time_min: next,
+      previous: current,
+      changed,
+      at_floor: atFloor,
+    });
+  } catch (error) {
+    console.error('Error marking transit too far:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// User asked to walk instead of this transit suggestion: skip it and serve a
+// walking place next. Transit stays enabled for later suggestions.
+export const preferWalk = async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.id, 10);
+    if (isNaN(tripId) || tripId <= 0) return res.status(400).json({ error: 'Invalid trip ID' });
+    const { place_id } = req.body || {};
+
+    const tripCheck = await usersDb.query(
+      'SELECT user_id FROM trips WHERE trip_id = $1',
+      [tripId]
+    );
+    if (tripCheck.rowCount === 0) return res.status(404).json({ error: 'Trip not found' });
+    const userId = tripCheck.rows[0].user_id;
+
+    if (place_id) {
+      try {
+        await recordFeedback(userId, tripId, place_id, 'skipped');
+      } catch (err) {
+        console.error('Error sending prefer-walk skip feedback to engine:', err.message);
+      }
+    }
+
+    preferWalkOnce.add(tripId);
+
+    res.json({ prefer_walk_next: true });
+  } catch (error) {
+    console.error('Error preferring walk:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const enableTransit = async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.id, 10);
+    if (isNaN(tripId) || tripId <= 0) {
+      return res.status(400).json({ error: 'Invalid trip ID' });
+    }
+
+    const { max_travel_time_min } = req.body || {};
+    let travelTime = 30;
+    if (max_travel_time_min !== undefined && max_travel_time_min !== null) {
+      const parsed = parseInt(max_travel_time_min, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        travelTime = parsed;
+      }
+    }
+
+    const updateResult = await usersDb.query(
+      `UPDATE trips
+       SET preferred_transportation = 'public',
+           max_travel_time_min = $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE trip_id = $2
+       RETURNING trip_id, user_id, preferred_transportation, max_travel_time_min`,
+      [travelTime, tripId]
+    );
+
+    if (updateResult.rowCount === 0) {
+      return res.status(404).json({ error: 'Trip not found' });
+    }
+
+    // Evict recommendation cache so next request fetches fresh transit-aware recommendations
+    tripRecommendationsCache.delete(tripId);
+    preferWalkOnce.delete(tripId);
+
+    const tripRow = updateResult.rows[0];
+    schedulePreferenceEmbeddingRebuild(tripRow.user_id, tripId);
+
+    res.json({
+      ok: true,
+      trip_id: tripId,
+      preferred_transportation: 'public',
+      max_travel_time_min: travelTime,
+    });
+  } catch (error) {
+    console.error('Error enabling transit:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 
 export const skipTripActivity = async (req, res) => {
   try {

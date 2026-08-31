@@ -6,7 +6,7 @@ import { API_BASE } from '@/config';
 import { 
   Calendar, MapPin, ArrowRight, ArrowLeft, Check,
   UtensilsCrossed, TreePine, Theater, PartyPopper, 
-  DollarSign, Gauge, Footprints
+  DollarSign, Gauge, Footprints, Bus
 } from 'lucide-react';
 import { StepIndicator } from '@/components/StepIndicator';
 import { TripSetup, TripPreferences, TripConstraints, defaultTripSetup } from '@/types/trip';
@@ -363,7 +363,10 @@ export default function WizardPage() {
                     <div className="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center">
                       <Footprints className="w-5 h-5 text-secondary" />
                     </div>
-                    <span className="font-medium">Max Walking Distance</span>
+                    <div>
+                      <span className="font-medium block">Max Walking Distance</span>
+                      <span className="text-xs text-muted-foreground">How far you're comfortable walking</span>
+                    </div>
                   </div>
                   <span className="text-sm font-semibold text-secondary">
                     {tripSetup.constraints.maxWalkingDistance} km
@@ -378,6 +381,103 @@ export default function WizardPage() {
                   onChange={(e) => updateConstraints({ maxWalkingDistance: Number(e.target.value) })}
                   className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer accent-secondary"
                 />
+                <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                  <span>0.5 km (quick stroll)</span>
+                  <span>10 km (long walk)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Public Transportation */}
+            <div className="rounded-xl border bg-card shadow-card hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+              <div className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Bus className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <span className="font-medium block">Public Transportation</span>
+                      <span className="text-xs text-muted-foreground">Willing to take public transport for further attractions?</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => updateConstraints({
+                      allowPublicTransit: true,
+                      transportType: 'public',
+                      maxTravelTimeMin: tripSetup.constraints.maxTravelTimeMin || 30
+                    })}
+                    className={`h-11 rounded-xl font-semibold text-sm transition-all duration-200 border-2 flex items-center justify-center gap-2 ${
+                      tripSetup.constraints.allowPublicTransit
+                        ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                        : 'border-input bg-card text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    <Check className={`w-4 h-4 ${tripSetup.constraints.allowPublicTransit ? 'opacity-100' : 'opacity-0'}`} />
+                    Yes, allow transit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateConstraints({
+                      allowPublicTransit: false,
+                      transportType: 'walking',
+                      maxTravelTimeMin: 0
+                    })}
+                    className={`h-11 rounded-xl font-semibold text-sm transition-all duration-200 border-2 flex items-center justify-center gap-2 ${
+                      !tripSetup.constraints.allowPublicTransit
+                        ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                        : 'border-input bg-card text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    <Check className={`w-4 h-4 ${!tripSetup.constraints.allowPublicTransit ? 'opacity-100' : 'opacity-0'}`} />
+                    No, walking only
+                  </button>
+                </div>
+
+                {tripSetup.constraints.allowPublicTransit && (
+                  <div className="mt-5 pt-4 border-t space-y-3 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-foreground">
+                        Max Transit Travel Time
+                      </label>
+                      <span className="text-sm font-semibold text-primary">
+                        {tripSetup.constraints.maxTravelTimeMin ?? 30} min
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={10}
+                      max={60}
+                      step={5}
+                      value={tripSetup.constraints.maxTravelTimeMin ?? 30}
+                      onChange={(e) => updateConstraints({ maxTravelTimeMin: Number(e.target.value) })}
+                      className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
+                    />
+                    <div className="flex justify-between gap-1 mt-1">
+                      {[15, 30, 45, 60].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => updateConstraints({ maxTravelTimeMin: preset })}
+                          className={`text-xs px-2 py-1 rounded-md transition-colors ${
+                            (tripSetup.constraints.maxTravelTimeMin ?? 30) === preset
+                              ? 'bg-primary/20 text-primary font-semibold'
+                              : 'text-muted-foreground hover:bg-muted'
+                          }`}
+                        >
+                          {preset}m
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      We'll suggest top-match places reachable within this ride time.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -429,10 +529,18 @@ export default function WizardPage() {
                 </div>
 
                 <div className="flex items-center gap-3 p-3 bg-card rounded-lg">
-                  <Footprints className="w-5 h-5 text-accent" />
+                  {tripSetup.constraints.allowPublicTransit ? (
+                    <Bus className="w-5 h-5 text-accent" />
+                  ) : (
+                    <Footprints className="w-5 h-5 text-accent" />
+                  )}
                   <div>
                     <p className="text-xs text-muted-foreground">Transportation</p>
-                    <p className="font-semibold capitalize">Walking</p>
+                    <p className="font-semibold">
+                      {tripSetup.constraints.allowPublicTransit
+                        ? `Public Transit (up to ${tripSetup.constraints.maxTravelTimeMin ?? 30} min) & Walking (${tripSetup.constraints.maxWalkingDistance} km)`
+                        : `Walking only (up to ${tripSetup.constraints.maxWalkingDistance} km)`}
+                    </p>
                   </div>
                 </div>
               </div>

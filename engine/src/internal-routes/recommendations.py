@@ -19,6 +19,13 @@ from src.services.maxmin_ranker import MaxMinRanker
 from src.services.majority_voter import MajorityVoter
 from src.services.feedback_service import FeedbackService
 from src.services.companion_service import CompanionSuggestionService
+from src.services.transit_config import (
+    trip_transit_active,
+    trip_max_travel_time_min,
+    transit_max_radius_km,
+)
+from src.services.ranking_utils import annotate_reachability, apply_transit_preference_gate
+from src.services.transit_service import validate_transit_candidates
 from src.utils.fallback_coords import FALLBACK_COORDS
 from db.attractionsConnection import get_db_connection as get_attr_conn
 
@@ -81,6 +88,9 @@ async def get_recommendations(req: RecommendationRequest):
             if not db_travel_style or db_max_walk_km is None:
                 raise HTTPException(status_code=500, detail="Missing travel_style or max_walking_distance in database.")
             db_max_walk_km = float(db_max_walk_km)
+            transit_active = trip_transit_active(trip_data)
+            max_travel_min = trip_max_travel_time_min(trip_data)
+            search_radius_km = max(db_max_walk_km, transit_max_radius_km()) if transit_active else db_max_walk_km
 
             dest = trip_data.get("destination")
             if not dest:
@@ -130,8 +140,16 @@ async def get_recommendations(req: RecommendationRequest):
             user_lat=user_lat,
             user_lng=user_lng,
             max_walk_km=db_max_walk_km,
-            current_hour=current_hour
+            current_hour=current_hour,
+            search_radius_km=search_radius_km,
         )
+
+        if transit_active:
+            annotate_reachability(candidates, user_lat, user_lng, db_max_walk_km)
+            candidates = apply_transit_preference_gate(candidates)
+        else:
+            annotate_reachability(candidates, user_lat, user_lng, db_max_walk_km)
+            candidates = [c for c in candidates if c.get("reachable_by") != "transit"]
         
         try:
             real_seen_categories = set()
@@ -158,6 +176,14 @@ async def get_recommendations(req: RecommendationRequest):
         ranked_rrf    = rrf_ranker.rank_candidates(candidates=list(candidates),    **base_rank_kwargs)
         ranked_maxmin = maxmin_ranker.rank_candidates(candidates=list(candidates), **base_rank_kwargs)
         ranked_candidates = majority_voter.vote([ranked_linear, ranked_rrf, ranked_maxmin])
+
+        if transit_active:
+            ranked_candidates = validate_transit_candidates(
+                ranked_candidates,
+                user_lat,
+                user_lng,
+                max_travel_time_min=max_travel_min,
+            )
         
         # 5. Format Output
         responses = []
@@ -168,7 +194,10 @@ async def get_recommendations(req: RecommendationRequest):
                 reasoning=str(c.get('scoring_breakdown', {})),
                 distance_km=c.get('distance_km'),
                 estimated_duration_minutes=None, # TBD by future logic
-                generated_at=req.current_time or "2023-01-01T00:00:00Z" # Dummy fallback
+                generated_at=req.current_time or "2023-01-01T00:00:00Z", # Dummy fallback
+                reachable_by=c.get('reachable_by'),
+                transit_minutes=c.get('transit_minutes'),
+                transit_summary=c.get('transit_summary'),
             ))
             
         return responses

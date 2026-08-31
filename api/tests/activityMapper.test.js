@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mapEngineAttractionToActivity } from '../src/utils/activityMapper.js';
+import { mapEngineAttractionToActivity, mapEngineRecommendationToActivity } from '../src/utils/activityMapper.js';
 
 test('maps a full companion suggestion to the activity shape', () => {
   const attr = {
@@ -35,6 +35,8 @@ test('maps a full companion suggestion to the activity shape', () => {
   assert.equal(activity.lat, 48.8606);
   assert.equal(activity.lng, 2.3376);
   assert.equal(activity.completed, false);
+  assert.equal(activity.reachableBy, null);
+  assert.equal(activity.transitMinutes, null);
 });
 
 test('falls back to activity_id, default time, Free cost, and general category', () => {
@@ -54,4 +56,17 @@ test('falls back to activity_id, default time, Free cost, and general category',
 test('treats missing budget as Free', () => {
   const activity = mapEngineAttractionToActivity({ place_id: 'x', name: 'N' });
   assert.equal(activity.cost, 'Free');
+});
+
+test('passes through transit metadata from the parent recommendation', () => {
+  const activity = mapEngineRecommendationToActivity({
+    attraction: { place_id: 't-1', name: 'Far Museum', latitude: 1, longitude: 2, categories: ['Museum'] },
+    reachable_by: 'transit',
+    transit_minutes: 12,
+    transit_summary: 'Bus 5 to Centre',
+  });
+  assert.equal(activity.reachableBy, 'transit');
+  assert.equal(activity.transitMinutes, 12);
+  assert.equal(activity.transitSummary, 'Bus 5 to Centre');
+  assert.equal(activity.title, 'Far Museum');
 });

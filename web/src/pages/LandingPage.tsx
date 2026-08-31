@@ -57,6 +57,7 @@ export function LandingPage() {
             preference_breakdown: Record<string, number> | null;
             max_walking_distance: number | null;
             preferred_transportation: 'walking' | 'public' | 'taxi' | null;
+            max_travel_time_min: number | null;
           }>;
         };
         const trips = Array.isArray(data.trips) ? data.trips : [];
@@ -74,6 +75,7 @@ export function LandingPage() {
         }
         const activeStartStr = String(active.start_date).slice(0, 10);
         const activeEndStr = String(active.end_date).slice(0, 10);
+        const isPublic = active.preferred_transportation === 'public';
         setActiveTrip({
           tripId: active.trip_id,
           tripSetup: {
@@ -87,6 +89,8 @@ export function LandingPage() {
             constraints: {
               maxWalkingDistance: active.max_walking_distance ?? defaultTripSetup.constraints.maxWalkingDistance,
               transportType: active.preferred_transportation ?? defaultTripSetup.constraints.transportType,
+              allowPublicTransit: isPublic,
+              maxTravelTimeMin: active.max_travel_time_min ?? defaultTripSetup.constraints.maxTravelTimeMin,
             },
           },
         });

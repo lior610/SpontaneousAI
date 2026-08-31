@@ -1,4 +1,4 @@
-import { MapPin, Navigation, Star, Clock, DollarSign, ExternalLink } from 'lucide-react';
+import { MapPin, Navigation, Star, Clock, DollarSign, ExternalLink, Bus, Footprints } from 'lucide-react';
 import { Activity } from '@/types/trip';
 import { featureFlags } from '@/config/featureFlags';
 
@@ -6,6 +6,8 @@ interface ActivityCardProps {
   activity: Activity;
   onComplete: () => void;
   isLoading?: boolean;
+  onTooFar?: () => void;
+  onPreferWalk?: () => void;
 }
 
 const categoryIcons: Record<string, string> = {
@@ -24,7 +26,8 @@ const categoryColors: Record<string, string> = {
   general: 'bg-muted text-muted-foreground border-border',
 };
 
-export function ActivityCard({ activity, onComplete, isLoading }: ActivityCardProps) {
+export function ActivityCard({ activity, onComplete, isLoading, onTooFar, onPreferWalk }: ActivityCardProps) {
+  const isTransit = activity.reachableBy === 'transit';
   const handleNavigate = () => {
     const encodedAddress = encodeURIComponent(activity.address);
     window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`, '_blank');
@@ -54,6 +57,15 @@ export function ActivityCard({ activity, onComplete, isLoading }: ActivityCardPr
           )}
         </div>
         <h3 className="text-lg font-bold mt-3">{activity.title}</h3>
+        {isTransit && (
+          <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-primary/10 text-primary border-primary/20">
+            <Bus className="w-3.5 h-3.5" />
+            {activity.transitMinutes != null
+              ? `~${activity.transitMinutes} min by public transport`
+              : 'A short ride by public transport'}
+            {activity.transitSummary ? ` · ${activity.transitSummary}` : ''}
+          </div>
+        )}
       </div>
 
       <div className="p-5 pt-0 space-y-4">
@@ -97,6 +109,29 @@ export function ActivityCard({ activity, onComplete, isLoading }: ActivityCardPr
             {isLoading ? 'Loading...' : 'Done! Next →'}
           </button>
         </div>
+        {isTransit && (onTooFar || onPreferWalk) && (
+          <div className="flex gap-3">
+            {onTooFar && (
+              <button
+                onClick={onTooFar}
+                disabled={isLoading}
+                className="flex-1 inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-sm font-semibold border text-foreground hover:bg-muted transition-all disabled:opacity-50"
+              >
+                Too far
+              </button>
+            )}
+            {onPreferWalk && (
+              <button
+                onClick={onPreferWalk}
+                disabled={isLoading}
+                className="flex-1 inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-sm font-semibold border text-foreground hover:bg-muted transition-all disabled:opacity-50"
+              >
+                <Footprints className="w-4 h-4" />
+                I'd rather walk
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

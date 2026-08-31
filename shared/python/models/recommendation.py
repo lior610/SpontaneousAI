@@ -30,6 +30,9 @@ class RecommendationResponse(BaseModel):
     distance_km: Optional[float] = None
     estimated_duration_minutes: Optional[int] = None
     generated_at: datetime
+    reachable_by: Optional[str] = None  # 'walking' | 'transit'
+    transit_minutes: Optional[int] = None
+    transit_summary: Optional[str] = None
 
 
 class CompanionSuggestion(BaseModel):

@@ -14,6 +14,8 @@ The system generates a personal and dynamic trip itinerary in real time using da
 - API: http://localhost:3000
 - Web: http://localhost:5173
 
+Public-transport suggestions use the same `VITE_GOOGLE_MAPS_API_KEY` as the map. Enable the **Routes API** (and Maps JavaScript API) on that key. Without a key, the engine estimates ride time from distance. See `.env.example` (`TRANSIT_*`) and `explanations/public_transport_suggestions.md`.
+
 ## How to Run
 
 ### Local Development

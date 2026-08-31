@@ -54,7 +54,10 @@ class MaxMinRanker:
                 'hours':      round(raw['hours'],       3),
                 'budget':     round(raw['budget'],      3),
                 'popularity': round(raw['popularity'],  3),
-                'worst_dim':  min(raw, key=lambda k: raw[k] if k not in ('dist_km', 'is_closed') else 1.0),
+                'worst_dim':  min(
+                    (k for k in raw if k not in ('dist_km', 'is_closed', 'reachable_by')),
+                    key=lambda k: raw[k],
+                ),
             }
             result.append(c)
 
